@@ -52,7 +52,6 @@
       const ctx = overlay.getContext("2d");
       const info = document.getElementById("info");
 
-      // Kamera starten
       async function startCamera() {
         try {
           const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
@@ -63,7 +62,6 @@
         }
       }
 
-      // GPS-Position ermitteln
       function getLocation() {
         if (navigator.geolocation) {
           navigator.geolocation.watchPosition(updatePosition, handleLocationError);
@@ -83,48 +81,35 @@
         info.textContent = "Standort konnte nicht ermittelt werden.";
       }
 
-      // Mondposition berechnen
       function updateMoonPosition() {
         const moonPosition = SunCalc.getMoonPosition(new Date(), lat, lon);
-        const azimuth = (moonPosition.azimuth * 180) / Math.PI;
-        const altitude = (moonPosition.altitude * 180) / Math.PI;
-        info.textContent = `Mond: Azimut ${azimuth.toFixed(2)}°, Höhe ${altitude.toFixed(2)}°`;
-        drawOverlay(azimuth, altitude);
+        const moonAzimuth = (moonPosition.azimuth * 180) / Math.PI;
+        const moonAltitude = (moonPosition.altitude * 180) / Math.PI;
+        drawOverlay(moonAzimuth, moonAltitude);
       }
 
-      // Overlay zeichnen
       function drawOverlay(moonAzimuth, moonAltitude) {
         ctx.clearRect(0, 0, overlay.width, overlay.height);
-        const centerX = overlay.width / 2;
-        const centerY = overlay.height / 2;
-
-        // Mond-Position als Text anzeigen
-        const relativeAzimuth = (moonAzimuth - heading + 360) % 360;
-        const horizontalPosition = relativeAzimuth < 90 || relativeAzimuth > 270 ? "rechts" : "links";
-        const verticalPosition = moonAltitude > 0 ? "hoch" : "runter";
 
         ctx.font = "20px Arial";
         ctx.fillStyle = "white";
         ctx.textAlign = "left";
         ctx.fillText(`Mond: Azimut ${moonAzimuth.toFixed(2)}°, Höhe ${moonAltitude.toFixed(2)}°`, 20, overlay.height - 60);
-        ctx.fillText(`Position: ${horizontalPosition}, ${verticalPosition}`, 20, overlay.height - 30);
+        ctx.fillText(`Kamera: Azimut ${heading.toFixed(2)}°, Neigung ${pitch.toFixed(2)}°`, 20, overlay.height - 30);
       }
 
-      // Bewegungssensoren
       function handleOrientation(event) {
-        heading = event.alpha; // Kompass-Richtung
-        pitch = event.beta; // Neigung vorne/hinten
-        roll = event.gamma; // Neigung links/rechts
+        heading = event.alpha || 0; // Kompass-Richtung
+        pitch = event.beta || 0; // Neigung vorne/hinten
+        roll = event.gamma || 0; // Neigung links/rechts
         updateMoonPosition();
       }
 
-      // Initialisierung
       function init() {
         startCamera();
         getLocation();
         window.addEventListener("deviceorientation", handleOrientation);
 
-        // Canvas-Größe anpassen
         function resizeCanvas() {
           overlay.width = video.clientWidth;
           overlay.height = video.clientHeight;
@@ -132,7 +117,6 @@
         window.addEventListener("resize", resizeCanvas);
         resizeCanvas();
 
-        // Regelmäßige Aktualisierung
         setInterval(updateMoonPosition, 1000);
       }
 
