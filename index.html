@@ -111,13 +111,15 @@
         ctx.fill();
         ctx.restore();
 
-        // Mond-Indikator zeichnen
-        const moonX = centerX + Math.sin(((moonAzimuth - heading) * Math.PI) / 180) * centerY;
-        const moonY = centerY - Math.sin((moonAltitude * Math.PI) / 180) * centerY;
-        ctx.beginPath();
-        ctx.arc(moonX, moonY, 20, 0, 2 * Math.PI);
-        ctx.fillStyle = "rgba(255, 255, 0, 0.7)";
-        ctx.fill();
+        // Mond-Position als Text anzeigen
+        const relativeAzimuth = (moonAzimuth - heading + 360) % 360;
+        const horizontalPosition = relativeAzimuth < 90 || relativeAzimuth > 270 ? "rechts" : "links";
+        const verticalPosition = moonAltitude > 0 ? "hoch" : "runter";
+
+        ctx.font = "20px Arial";
+        ctx.fillStyle = "white";
+        ctx.textAlign = "center";
+        ctx.fillText(`Mond: ${horizontalPosition}, ${verticalPosition}`, centerX, overlay.height - 30);
       }
 
       // Bewegungssensoren
