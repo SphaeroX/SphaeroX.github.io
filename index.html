@@ -3,171 +3,98 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Planeten-Radar</title>
+    <title>Sun Tracker</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             height: 100vh;
             margin: 0;
-            background-color: #f0f0f0;
+            font-family: Arial, sans-serif;
         }
-        #radar {
-            width: 300px;
-            height: 300px;
-            border-radius: 50%;
-            background-color: #000;
-            position: relative;
-            overflow: hidden;
+        video {
+            display: block;
+            width: 80%;
+            max-width: 600px;
         }
-        #pointer {
-            position: absolute;
-            width: 4px;
-            height: 150px;
-            background-color: #00ff00;
-            top: 50%;
-            left: 50%;
-            transform-origin: bottom center;
-        }
-        #target {
-            position: absolute;
-            width: 10px;
-            height: 10px;
-            background-color: #ff0000;
-            border-radius: 50%;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-        }
-        #info {
+        #instructions {
             margin-top: 20px;
-            text-align: center;
+            font-size: 1.2em;
         }
     </style>
 </head>
 <body>
-    <div id="radar">
-        <div id="pointer"></div>
-        <div id="target"></div>
-    </div>
-    <div id="info">
-        <select id="celestialBody">
-            <option value="sun">Sonne</option>
-            <option value="moon">Mond</option>
-            <option value="mercury">Merkur</option>
-            <option value="venus">Venus</option>
-            <option value="mars">Mars</option>
-            <option value="jupiter">Jupiter</option>
-            <option value="saturn">Saturn</option>
-            <option value="uranus">Uranus</option>
-            <option value="neptune">Neptun</option>
-        </select>
-        <p id="direction"></p>
-        <p id="elevation"></p>
-    </div>
-
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/astronomy-engine/2.1.17/astronomy.min.js"></script>
+    <video id="video" autoplay></video>
+    <div id="instructions">Richte dein Handy zur Sonne aus...</div>
+    
     <script>
-        const radar = document.getElementById('radar');
-        const pointer = document.getElementById('pointer');
-        const target = document.getElementById('target');
-        const celestialBodySelect = document.getElementById('celestialBody');
-        const directionElement = document.getElementById('direction');
-        const elevationElement = document.getElementById('elevation');
+        const video = document.getElementById('video');
+        const instructions = document.getElementById('instructions');
 
-        let latitude, longitude, heading;
+        // Access the webcam
+        navigator.mediaDevices.getUserMedia({ video: true })
+            .then(stream => {
+                video.srcObject = stream;
+            })
+            .catch(err => {
+                console.error("Error accessing webcam: ", err);
+                instructions.textContent = "Webcam-Zugriff fehlgeschlagen.";
+            });
 
-        function getLocation() {
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(showPosition, showError);
-            } else {
-                alert("Geolocation wird von diesem Browser nicht unterstützt.");
-            }
-        }
+        let latitude, longitude;
+        let orientation = { alpha: 0, beta: 0, gamma: 0 };
 
-        function showPosition(position) {
+        // Get GPS location
+        navigator.geolocation.getCurrentPosition(position => {
             latitude = position.coords.latitude;
             longitude = position.coords.longitude;
-            updateCelestialBodyPosition();
-        }
+            calculateSunPosition();
+        }, err => {
+            console.error("Error getting location: ", err);
+            instructions.textContent = "GPS-Zugriff fehlgeschlagen.";
+        });
 
-        function showError(error) {
-            switch(error.code) {
-                case error.PERMISSION_DENIED:
-                    alert("Benutzer hat die Geolocation-Anfrage abgelehnt.");
-                    break;
-                case error.POSITION_UNAVAILABLE:
-                    alert("Standortinformationen sind nicht verfügbar.");
-                    break;
-                case error.TIMEOUT:
-                    alert("Die Anfrage zum Abrufen des Benutzerstandorts ist abgelaufen.");
-                    break;
-                case error.UNKNOWN_ERROR:
-                    alert("Ein unbekannter Fehler ist aufgetreten.");
-                    break;
-            }
-        }
+        // Get device orientation
+        window.addEventListener('deviceorientation', event => {
+            orientation.alpha = event.alpha;
+            orientation.beta = event.beta;
+            orientation.gamma = event.gamma;
+            calculateSunPosition();
+        });
 
-        function handleOrientation(event) {
-            heading = event.alpha;
-            updateRadar();
-        }
+        function calculateSunPosition() {
+            if (latitude === undefined || longitude === undefined) return;
+            
+            const now = new Date();
+            const hours = now.getUTCHours();
+            const minutes = now.getUTCMinutes();
+            const seconds = now.getUTCSeconds();
+            const dayOfYear = Math.floor((now - new Date(now.getFullYear(), 0, 0)) / 1000 / 60 / 60 / 24);
 
-        function updateRadar() {
-            if (heading !== undefined) {
-                pointer.style.transform = `rotate(${heading}deg)`;
-                updateCelestialBodyPosition();
-            }
-        }
+            // Calculate sun position
+            const declination = 23.45 * Math.sin(2 * Math.PI / 365 * (dayOfYear - 81));
+            const timeCorrection = 4 * (longitude - 15 * Math.floor(longitude / 15)) + 60 * (hours - 12) + minutes + seconds / 60;
+            const solarHourAngle = 15 * (timeCorrection / 60);
+            const solarAltitude = Math.asin(Math.sin(declination * Math.PI / 180) * Math.sin(latitude * Math.PI / 180) + Math.cos(declination * Math.PI / 180) * Math.cos(latitude * Math.PI / 180) * Math.cos(solarHourAngle * Math.PI / 180)) * 180 / Math.PI;
+            const solarAzimuth = Math.acos((Math.sin(declination * Math.PI / 180) - Math.sin(solarAltitude * Math.PI / 180) * Math.sin(latitude * Math.PI / 180)) / (Math.cos(solarAltitude * Math.PI / 180) * Math.cos(latitude * Math.PI / 180))) * 180 / Math.PI;
+            
+            const deviceAzimuth = orientation.alpha;
+            const deviceAltitude = orientation.beta - 90;
 
-        function updateCelestialBodyPosition() {
-            if (latitude === undefined || longitude === undefined || heading === undefined) return;
+            let direction = '';
 
-            const selectedBody = celestialBodySelect.value;
-            const date = new Date();
-            const observer = new Astronomy.Observer(latitude, longitude, 0);
-            let body;
-
-            switch (selectedBody) {
-                case 'sun':
-                    body = Astronomy.Sun;
-                    break;
-                case 'moon':
-                    body = Astronomy.Moon;
-                    break;
-                default:
-                    body = Astronomy.Body[selectedBody.charAt(0).toUpperCase() + selectedBody.slice(1)];
+            if (Math.abs(solarAzimuth - deviceAzimuth) > 10) {
+                direction += solarAzimuth > deviceAzimuth ? 'rechts' : 'links';
             }
 
-            const equatorial = Astronomy.Equator(body, date, observer, true, true);
-            const horizontal = Astronomy.Horizon(date, observer, equatorial.ra, equatorial.dec, 'normal');
+            if (Math.abs(solarAltitude - deviceAltitude) > 10) {
+                direction += solarAltitude > deviceAltitude ? ' hoch' : ' runter';
+            }
 
-            const azimuth = horizontal.azimuth;
-            const altitude = horizontal.altitude;
-
-            const relativeAngle = (azimuth - heading + 360) % 360;
-            const x = Math.sin(relativeAngle * Math.PI / 180) * (1 - altitude / 90) * 150;
-            const y = -Math.cos(relativeAngle * Math.PI / 180) * (1 - altitude / 90) * 150;
-
-            target.style.transform = `translate(${x}px, ${y}px)`;
-
-            directionElement.textContent = `Richtung: ${azimuth.toFixed(2)}°`;
-            elevationElement.textContent = `Höhenwinkel: ${altitude.toFixed(2)}°`;
+            instructions.textContent = direction === '' ? 'Perfekt ausgerichtet!' : `Weiter nach ${direction.trim()}.`;
         }
-
-        celestialBodySelect.addEventListener('change', updateCelestialBodyPosition);
-
-        if (window.DeviceOrientationEvent) {
-            window.addEventListener('deviceorientation', handleOrientation);
-        } else {
-            alert("Ihr Gerät unterstützt die Orientierungserkennung nicht.");
-        }
-
-        getLocation();
-        setInterval(getLocation, 60000); // Aktualisiere die Position jede Minute
     </script>
 </body>
 </html>
