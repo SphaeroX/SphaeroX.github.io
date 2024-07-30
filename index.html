@@ -81,7 +81,7 @@
     <div id="topGuide" class="guide"></div>
     <div id="bottomGuide" class="guide"></div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.8.0/suncalc.min.js"></script>
+    <script src="https://unpkg.com/astronomy-engine/astronomy-engine.js"></script>
     <script>
       const cameraView = document.getElementById("cameraView");
       const overlay = document.getElementById("overlay");
@@ -123,38 +123,42 @@
       }
 
       function calculateTargetPosition(target, latitude, longitude) {
+        const observer = Astronomy.MakeObserver(latitude, longitude, 0);
         const date = new Date();
         let position;
+
         switch(target) {
           case 'mercury':
-            position = SunCalc.getPosition(date, latitude, longitude, 'mercury');
+            position = Astronomy.Equator('Mercury', date, observer, true, true);
             break;
           case 'venus':
-            position = SunCalc.getPosition(date, latitude, longitude, 'venus');
+            position = Astronomy.Equator('Venus', date, observer, true, true);
             break;
           case 'mars':
-            position = SunCalc.getPosition(date, latitude, longitude, 'mars');
+            position = Astronomy.Equator('Mars', date, observer, true, true);
             break;
           case 'jupiter':
-            position = SunCalc.getPosition(date, latitude, longitude, 'jupiter');
+            position = Astronomy.Equator('Jupiter', date, observer, true, true);
             break;
           case 'saturn':
-            position = SunCalc.getPosition(date, latitude, longitude, 'saturn');
+            position = Astronomy.Equator('Saturn', date, observer, true, true);
             break;
           case 'uranus':
-            position = SunCalc.getPosition(date, latitude, longitude, 'uranus');
+            position = Astronomy.Equator('Uranus', date, observer, true, true);
             break;
           case 'neptune':
-            position = SunCalc.getPosition(date, latitude, longitude, 'neptune');
+            position = Astronomy.Equator('Neptune', date, observer, true, true);
             break;
           case 'moon':
           default:
-            position = SunCalc.getMoonPosition(date, latitude, longitude);
+            position = Astronomy.Equator('Moon', date, observer, true, true);
             break;
         }
+
+        const horizontal = Astronomy.Horizon(date, observer, position.ra, position.dec, 'normal');
         return {
-          azimuth: (position.azimuth * 180) / Math.PI,
-          altitude: (position.altitude * 180) / Math.PI,
+          azimuth: horizontal.azimuth,
+          altitude: horizontal.altitude,
         };
       }
 
@@ -162,7 +166,7 @@
         overlay.innerHTML = `
           Compass: ${compass.toFixed(2)}°<br>
           Tilt: ${tilt.toFixed(2)}°<br>
-          Target Direction: ${targetDirection.azimuth.toFixed(2)}°, ${targetDirection.altitude.toFixed(2)}°
+          Target Direction: Azimuth: ${targetDirection.azimuth.toFixed(2)}°, Altitude: ${targetDirection.altitude.toFixed(2)}°
         `;
       }
 
