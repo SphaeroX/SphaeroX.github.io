@@ -1,209 +1,173 @@
 <!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Sky Tracker App</title>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Planeten-Radar</title>
     <style>
-      body,
-      html {
-        margin: 0;
-        padding: 0;
-        height: 100%;
-        overflow: hidden;
-      }
-      #cameraView {
-        position: relative;
-        width: 100%;
-        height: 100%;
-      }
-      #overlay {
-        position: absolute;
-        top: 10px;
-        left: 10px;
-        color: white;
-        background-color: rgba(0, 0, 0, 0.5);
-        padding: 10px;
-        font-family: Arial, sans-serif;
-      }
-      #targetSelect {
-        position: absolute;
-        top: 10px;
-        right: 10px;
-        padding: 10px;
-      }
-      .guide {
-        position: absolute;
-        background-color: blue;
-        opacity: 0.5;
-      }
-      #leftGuide,
-      #rightGuide {
-        width: 20px;
-        height: 100%;
-        top: 0;
-      }
-      #topGuide,
-      #bottomGuide {
-        width: 100%;
-        height: 20px;
-        left: 0;
-      }
-      #leftGuide {
-        left: 0;
-      }
-      #rightGuide {
-        right: 0;
-      }
-      #topGuide {
-        top: 0;
-      }
-      #bottomGuide {
-        bottom: 0;
-      }
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+        }
+        #radar {
+            width: 300px;
+            height: 300px;
+            border-radius: 50%;
+            background-color: #000;
+            position: relative;
+            overflow: hidden;
+        }
+        #pointer {
+            position: absolute;
+            width: 4px;
+            height: 150px;
+            background-color: #00ff00;
+            top: 50%;
+            left: 50%;
+            transform-origin: bottom center;
+        }
+        #target {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background-color: #ff0000;
+            border-radius: 50%;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+        #info {
+            margin-top: 20px;
+            text-align: center;
+        }
     </style>
-  </head>
-  <body>
-    <video id="cameraView" autoplay playsinline></video>
-    <div id="overlay"></div>
-    <select id="targetSelect">
-      <option value="moon">Moon</option>
-      <option value="mercury">Mercury</option>
-      <option value="venus">Venus</option>
-      <option value="mars">Mars</option>
-      <option value="jupiter">Jupiter</option>
-      <option value="saturn">Saturn</option>
-      <option value="uranus">Uranus</option>
-      <option value="neptune">Neptune</option>
-    </select>
-    <div id="leftGuide" class="guide"></div>
-    <div id="rightGuide" class="guide"></div>
-    <div id="topGuide" class="guide"></div>
-    <div id="bottomGuide" class="guide"></div>
+</head>
+<body>
+    <div id="radar">
+        <div id="pointer"></div>
+        <div id="target"></div>
+    </div>
+    <div id="info">
+        <select id="celestialBody">
+            <option value="sun">Sonne</option>
+            <option value="moon">Mond</option>
+            <option value="mercury">Merkur</option>
+            <option value="venus">Venus</option>
+            <option value="mars">Mars</option>
+            <option value="jupiter">Jupiter</option>
+            <option value="saturn">Saturn</option>
+            <option value="uranus">Uranus</option>
+            <option value="neptune">Neptun</option>
+        </select>
+        <p id="direction"></p>
+        <p id="elevation"></p>
+    </div>
 
-    <script src="https://unpkg.com/astronomy-engine/astronomy-engine.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/astronomy-engine/2.1.17/astronomy.min.js"></script>
     <script>
-      const cameraView = document.getElementById("cameraView");
-      const overlay = document.getElementById("overlay");
-      const targetSelect = document.getElementById("targetSelect");
-      const guides = {
-        left: document.getElementById("leftGuide"),
-        right: document.getElementById("rightGuide"),
-        top: document.getElementById("topGuide"),
-        bottom: document.getElementById("bottomGuide"),
-      };
+        const radar = document.getElementById('radar');
+        const pointer = document.getElementById('pointer');
+        const target = document.getElementById('target');
+        const celestialBodySelect = document.getElementById('celestialBody');
+        const directionElement = document.getElementById('direction');
+        const elevationElement = document.getElementById('elevation');
 
-      let currentPosition = null;
-      let targetPosition = null;
-      let target = 'moon';
+        let latitude, longitude, heading;
 
-      function startCamera() {
-        navigator.mediaDevices
-          .getUserMedia({ video: { facingMode: "environment" } })
-          .then((stream) => {
-            cameraView.srcObject = stream;
-          })
-          .catch((error) => {
-            console.error("Error accessing camera:", error);
-          });
-      }
-
-      function getLocation() {
-        return new Promise((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(
-            (position) => {
-              if (position.coords.accuracy <= 100) {
-                resolve(position.coords);
-              }
-            },
-            (error) => reject(error),
-            { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
-          );
-        });
-      }
-
-      function calculateTargetPosition(target, latitude, longitude) {
-        const observer = Astronomy.MakeObserver(latitude, longitude, 0);
-        const date = new Date();
-        let position;
-
-        switch(target) {
-          case 'mercury':
-            position = Astronomy.Equator('Mercury', date, observer, true, true);
-            break;
-          case 'venus':
-            position = Astronomy.Equator('Venus', date, observer, true, true);
-            break;
-          case 'mars':
-            position = Astronomy.Equator('Mars', date, observer, true, true);
-            break;
-          case 'jupiter':
-            position = Astronomy.Equator('Jupiter', date, observer, true, true);
-            break;
-          case 'saturn':
-            position = Astronomy.Equator('Saturn', date, observer, true, true);
-            break;
-          case 'uranus':
-            position = Astronomy.Equator('Uranus', date, observer, true, true);
-            break;
-          case 'neptune':
-            position = Astronomy.Equator('Neptune', date, observer, true, true);
-            break;
-          case 'moon':
-          default:
-            position = Astronomy.Equator('Moon', date, observer, true, true);
-            break;
+        function getLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(showPosition, showError);
+            } else {
+                alert("Geolocation wird von diesem Browser nicht unterstützt.");
+            }
         }
 
-        const horizontal = Astronomy.Horizon(date, observer, position.ra, position.dec, 'normal');
-        return {
-          azimuth: horizontal.azimuth,
-          altitude: horizontal.altitude,
-        };
-      }
-
-      function updateOverlay(compass, tilt, targetDirection) {
-        overlay.innerHTML = `
-          Compass: ${compass.toFixed(2)}°<br>
-          Tilt: ${tilt.toFixed(2)}°<br>
-          Target Direction: Azimuth: ${targetDirection.azimuth.toFixed(2)}°, Altitude: ${targetDirection.altitude.toFixed(2)}°
-        `;
-      }
-
-      function updateGuides(deviceOrientation, targetPosition) {
-        const azimuthDiff = targetPosition.azimuth - deviceOrientation.alpha;
-        const altitudeDiff = targetPosition.altitude - deviceOrientation.beta;
-
-        guides.left.style.display = azimuthDiff < -5 ? "block" : "none";
-        guides.right.style.display = azimuthDiff > 5 ? "block" : "none";
-        guides.top.style.display = altitudeDiff > 5 ? "block" : "none";
-        guides.bottom.style.display = altitudeDiff < -5 ? "block" : "none";
-      }
-
-      window.addEventListener("deviceorientation", (event) => {
-        if (currentPosition && targetPosition) {
-          updateOverlay(event.alpha, event.beta, targetPosition);
-          updateGuides(event, targetPosition);
+        function showPosition(position) {
+            latitude = position.coords.latitude;
+            longitude = position.coords.longitude;
+            updateCelestialBodyPosition();
         }
-      });
 
-      targetSelect.addEventListener("change", (event) => {
-        target = event.target.value;
-      });
-
-      async function init() {
-        startCamera();
-        try {
-          currentPosition = await getLocation();
-          setInterval(() => {
-            targetPosition = calculateTargetPosition(target, currentPosition.latitude, currentPosition.longitude);
-          }, 1000);
-        } catch (error) {
-          console.error("Error getting location:", error);
+        function showError(error) {
+            switch(error.code) {
+                case error.PERMISSION_DENIED:
+                    alert("Benutzer hat die Geolocation-Anfrage abgelehnt.");
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    alert("Standortinformationen sind nicht verfügbar.");
+                    break;
+                case error.TIMEOUT:
+                    alert("Die Anfrage zum Abrufen des Benutzerstandorts ist abgelaufen.");
+                    break;
+                case error.UNKNOWN_ERROR:
+                    alert("Ein unbekannter Fehler ist aufgetreten.");
+                    break;
+            }
         }
-      }
 
-      init();
+        function handleOrientation(event) {
+            heading = event.alpha;
+            updateRadar();
+        }
+
+        function updateRadar() {
+            if (heading !== undefined) {
+                pointer.style.transform = `rotate(${heading}deg)`;
+                updateCelestialBodyPosition();
+            }
+        }
+
+        function updateCelestialBodyPosition() {
+            if (latitude === undefined || longitude === undefined || heading === undefined) return;
+
+            const selectedBody = celestialBodySelect.value;
+            const date = new Date();
+            const observer = new Astronomy.Observer(latitude, longitude, 0);
+            let body;
+
+            switch (selectedBody) {
+                case 'sun':
+                    body = Astronomy.Sun;
+                    break;
+                case 'moon':
+                    body = Astronomy.Moon;
+                    break;
+                default:
+                    body = Astronomy.Body[selectedBody.charAt(0).toUpperCase() + selectedBody.slice(1)];
+            }
+
+            const equatorial = Astronomy.Equator(body, date, observer, true, true);
+            const horizontal = Astronomy.Horizon(date, observer, equatorial.ra, equatorial.dec, 'normal');
+
+            const azimuth = horizontal.azimuth;
+            const altitude = horizontal.altitude;
+
+            const relativeAngle = (azimuth - heading + 360) % 360;
+            const x = Math.sin(relativeAngle * Math.PI / 180) * (1 - altitude / 90) * 150;
+            const y = -Math.cos(relativeAngle * Math.PI / 180) * (1 - altitude / 90) * 150;
+
+            target.style.transform = `translate(${x}px, ${y}px)`;
+
+            directionElement.textContent = `Richtung: ${azimuth.toFixed(2)}°`;
+            elevationElement.textContent = `Höhenwinkel: ${altitude.toFixed(2)}°`;
+        }
+
+        celestialBodySelect.addEventListener('change', updateCelestialBodyPosition);
+
+        if (window.DeviceOrientationEvent) {
+            window.addEventListener('deviceorientation', handleOrientation);
+        } else {
+            alert("Ihr Gerät unterstützt die Orientierungserkennung nicht.");
+        }
+
+        getLocation();
+        setInterval(getLocation, 60000); // Aktualisiere die Position jede Minute
     </script>
-  </body>
+</body>
 </html>
