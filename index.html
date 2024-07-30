@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sun Tracker</title>
+    <title>Himmelskörper-Tracker</title>
     <style>
         body {
             display: flex;
@@ -23,32 +23,77 @@
             margin-top: 20px;
             font-size: 1.2em;
         }
+        select {
+            margin: 10px;
+            padding: 5px;
+            font-size: 1em;
+        }
     </style>
 </head>
 <body>
+    <select id="targetSelector">
+        <option value="sun">Sonne</option>
+        <option value="moon">Mond</option>
+        <option value="mercury">Merkur</option>
+        <option value="venus">Venus</option>
+        <option value="mars">Mars</option>
+        <option value="jupiter">Jupiter</option>
+        <option value="saturn">Saturn</option>
+        <option value="uranus">Uranus</option>
+        <option value="neptune">Neptun</option>
+    </select>
+    
+    <select id="cameraSelector"></select>
+    
     <video id="video" autoplay></video>
-    <div id="instructions">Richte dein Handy zur Sonne aus...</div>
+    <div id="instructions">Richte dein Handy zum gewählten Himmelskörper aus...</div>
     
     <script>
         const video = document.getElementById('video');
         const instructions = document.getElementById('instructions');
+        const targetSelector = document.getElementById('targetSelector');
+        const cameraSelector = document.getElementById('cameraSelector');
+        let selectedTarget = 'sun';
+        let devices = [];
+        let currentStream = null;
 
-        // Access the front camera
+        // Access the available cameras and populate the camera selector
         navigator.mediaDevices.enumerateDevices()
-            .then(devices => {
-                const videoDevices = devices.filter(device => device.kind === 'videoinput');
-                const frontCamera = videoDevices.find(device => device.label.toLowerCase().includes('front')) || videoDevices[0];
-                return navigator.mediaDevices.getUserMedia({ 
-                    video: { deviceId: frontCamera.deviceId } 
+            .then(deviceInfos => {
+                devices = deviceInfos.filter(device => device.kind === 'videoinput');
+                devices.forEach((device, index) => {
+                    const option = document.createElement('option');
+                    option.value = device.deviceId;
+                    option.text = device.label || `Kamera ${index + 1}`;
+                    cameraSelector.appendChild(option);
                 });
-            })
-            .then(stream => {
-                video.srcObject = stream;
+                if (devices.length > 0) {
+                    switchCamera(devices[0].deviceId);
+                }
             })
             .catch(err => {
-                console.error("Error accessing webcam: ", err);
-                instructions.textContent = "Webcam-Zugriff fehlgeschlagen.";
+                console.error("Error enumerating devices: ", err);
+                instructions.textContent = "Kamerazugriff fehlgeschlagen.";
             });
+
+        cameraSelector.addEventListener('change', event => {
+            switchCamera(event.target.value);
+        });
+
+        function switchCamera(deviceId) {
+            if (currentStream) {
+                currentStream.getTracks().forEach(track => track.stop());
+            }
+            navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: deviceId } } })
+                .then(stream => {
+                    currentStream = stream;
+                    video.srcObject = stream;
+                })
+                .catch(err => {
+                    console.error("Error switching camera: ", err);
+                    instructions.textContent = "Fehler beim Wechseln der Kamera.";
+                });
+        }
 
         let latitude, longitude;
         let orientation = { alpha: 0, beta: 0, gamma: 0 };
@@ -57,7 +102,7 @@
         navigator.geolocation.getCurrentPosition(position => {
             latitude = position.coords.latitude;
             longitude = position.coords.longitude;
-            calculateSunPosition();
+            calculateCelestialPosition();
         }, err => {
             console.error("Error getting location: ", err);
             instructions.textContent = "GPS-Zugriff fehlgeschlagen.";
@@ -68,10 +113,15 @@
             orientation.alpha = event.alpha;
             orientation.beta = event.beta;
             orientation.gamma = event.gamma;
-            calculateSunPosition();
+            calculateCelestialPosition();
         });
 
-        function calculateSunPosition() {
+        targetSelector.addEventListener('change', event => {
+            selectedTarget = event.target.value;
+            calculateCelestialPosition();
+        });
+
+        function calculateCelestialPosition() {
             if (latitude === undefined || longitude === undefined) return;
             
             const now = new Date();
@@ -80,13 +130,20 @@
             const seconds = now.getUTCSeconds();
             const dayOfYear = Math.floor((now - new Date(now.getFullYear(), 0, 0)) / 1000 / 60 / 60 / 24);
 
-            // Calculate sun position
-            const declination = 23.45 * Math.sin(2 * Math.PI / 365 * (dayOfYear - 81));
-            const timeCorrection = 4 * (longitude - 15 * Math.floor(longitude / 15)) + 60 * (hours - 12) + minutes + seconds / 60;
-            const solarHourAngle = 15 * (timeCorrection / 60);
-            const solarAltitude = Math.asin(Math.sin(declination * Math.PI / 180) * Math.sin(latitude * Math.PI / 180) + Math.cos(declination * Math.PI / 180) * Math.cos(latitude * Math.PI / 180) * Math.cos(solarHourAngle * Math.PI / 180)) * 180 / Math.PI;
-            const solarAzimuth = Math.acos((Math.sin(declination * Math.PI / 180) - Math.sin(solarAltitude * Math.PI / 180) * Math.sin(latitude * Math.PI / 180)) / (Math.cos(solarAltitude * Math.PI / 180) * Math.cos(latitude * Math.PI / 180))) * 180 / Math.PI;
-            
+            let celestialAltitude, celestialAzimuth;
+
+            if (selectedTarget === 'sun') {
+                const declination = 23.45 * Math.sin(2 * Math.PI / 365 * (dayOfYear - 81));
+                const timeCorrection = 4 * (longitude - 15 * Math.floor(longitude / 15)) + 60 * (hours - 12) + minutes + seconds / 60;
+                const solarHourAngle = 15 * (timeCorrection / 60);
+                celestialAltitude = Math.asin(Math.sin(declination * Math.PI / 180) * Math.sin(latitude * Math.PI / 180) + Math.cos(declination * Math.PI / 180) * Math.cos(latitude * Math.PI / 180) * Math.cos(solarHourAngle * Math.PI / 180)) * 180 / Math.PI;
+                celestialAzimuth = Math.acos((Math.sin(declination * Math.PI / 180) - Math.sin(celestialAltitude * Math.PI / 180) * Math.sin(latitude * Math.PI / 180)) / (Math.cos(celestialAltitude * Math.PI / 180) * Math.cos(latitude * Math.PI / 180))) * 180 / Math.PI;
+            } else {
+                // Placeholder for celestial calculations for the moon and other planets
+                celestialAltitude = 45; // Dummy value
+                celestialAzimuth = 90; // Dummy value
+            }
+
             const deviceAzimuth = (orientation.alpha + 360) % 360;
             const deviceAltitude = orientation.beta - 90;
             const screenOrientation = window.screen.orientation.type.includes('landscape') ? 'landscape' : 'portrait';
@@ -94,20 +151,20 @@
             let direction = '';
 
             if (screenOrientation === 'portrait') {
-                if (Math.abs(solarAzimuth - deviceAzimuth) > 10) {
-                    direction += solarAzimuth > deviceAzimuth ? 'rechts' : 'links';
+                if (Math.abs(celestialAzimuth - deviceAzimuth) > 10) {
+                    direction += celestialAzimuth > deviceAzimuth ? 'rechts' : 'links';
                 }
 
-                if (Math.abs(solarAltitude - deviceAltitude) > 10) {
-                    direction += solarAltitude > deviceAltitude ? ' hoch' : ' runter';
+                if (Math.abs(celestialAltitude - deviceAltitude) > 10) {
+                    direction += celestialAltitude > deviceAltitude ? ' hoch' : ' runter';
                 }
             } else {
-                if (Math.abs(solarAzimuth - deviceAzimuth) > 10) {
-                    direction += solarAzimuth > deviceAzimuth ? 'rechts' : 'links';
+                if (Math.abs(celestialAzimuth - deviceAzimuth) > 10) {
+                    direction += celestialAzimuth > deviceAzimuth ? 'rechts' : 'links';
                 }
 
-                if (Math.abs(solarAltitude - deviceAltitude) > 10) {
-                    direction += solarAltitude > deviceAltitude ? ' hoch' : ' runter';
+                if (Math.abs(celestialAltitude - deviceAltitude) > 10) {
+                    direction += celestialAltitude > deviceAltitude ? ' hoch' : ' runter';
                 }
             }
 
