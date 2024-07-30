@@ -1,117 +1,134 @@
 <!DOCTYPE html>
 <html>
-<head>
+  <head>
     <title>Mond Sucher</title>
     <style>
-        #video {
-            width: 100%;
-            height: auto;
-        }
-        #overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-        }
-        .highlight {
-            border: 5px solid red;
-        }
+      #video {
+        width: 100%;
+        height: auto;
+      }
+      #overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+      }
+      .highlight {
+        border: 5px solid red;
+      }
     </style>
-</head>
-<body>
+  </head>
+  <body>
     <video id="video" autoplay></video>
     <div id="overlay"></div>
+    <div id="info">
+      <p>Kompass: <span id="compass"></span></p>
+      <p>Neigung: <span id="tilt"></span></p>
+      <p>GPS: <span id="gps">GPS wird gesucht...</span></p>
+    </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/astronomy-engine/2.1.0/astronomy.min.js"></script>
 
     <script>
-        const video = document.getElementById('video');
-        const overlay = document.getElementById('overlay');
+      const compassElement = document.getElementById("compass");
+      const tiltElement = document.getElementById("tilt");
+      const gpsElement = document.getElementById("gps");
 
-        // Zugang zur Kamera
-        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-            .then(stream => {
-                video.srcObject = stream;
-            })
-            .catch(err => {
-                console.error('Fehler beim Zugriff auf die Kamera: ', err);
-            });
+      const video = document.getElementById("video");
+      const overlay = document.getElementById("overlay");
 
-        let currentOrientation = { alpha: 0, beta: 0, gamma: 0 };
-        let moonPosition = { azimuth: 0, altitude: 0 };
-
-        // Berechnung der Mondposition
-        function calculateMoonPosition(latitude, longitude, date) {
-            const observer = new Astronomy.Observer(latitude, longitude);
-            const time = Astronomy.MakeTime(date);
-            const moonPosition = Astronomy.Equator('Moon', time, observer, true, true);
-            return moonPosition.hor;
-        }
-
-        // Aktualisierung der Mondposition
-        function updateMoonPosition() {
-            navigator.geolocation.getCurrentPosition(position => {
-                const { latitude, longitude } = position.coords;
-                moonPosition = calculateMoonPosition(latitude, longitude, new Date());
-
-                console.log('Mond-Azimut: ', moonPosition.azimuth);
-                console.log('Mond-Höhe: ', moonPosition.altitude);
-            }, err => {
-                console.error('Fehler beim Abrufen der GPS-Daten: ', err);
-            });
-        }
-
-        // Orientation und Bewegungssensoren
-        window.addEventListener('deviceorientation', event => {
-            currentOrientation.alpha = event.alpha; // Kompassrichtung
-            currentOrientation.beta = event.beta; // Neigung nach vorne/hinten
-            currentOrientation.gamma = event.gamma; // Neigung seitlich
-
-            console.log('Alpha: ', currentOrientation.alpha, ' Beta: ', currentOrientation.beta, ' Gamma: ', currentOrientation.gamma);
-
-            updateOverlay();
+      // Zugang zur Kamera
+      navigator.mediaDevices
+        .getUserMedia({ video: { facingMode: "environment" } })
+        .then((stream) => {
+          video.srcObject = stream;
+        })
+        .catch((err) => {
+          console.error("Fehler beim Zugriff auf die Kamera: ", err);
         });
 
-        function updateOverlay() {
-            // Berechnen Sie die Differenz zwischen der aktuellen Ausrichtung des Geräts und der Position des Mondes
-            const azimuthDiff = currentOrientation.alpha - moonPosition.azimuth;
-            const altitudeDiff = currentOrientation.beta - moonPosition.altitude;
+      let currentOrientation = { alpha: 0, beta: 0, gamma: 0 };
+      let moonPosition = { azimuth: 0, altitude: 0 };
 
-            // Setzen Sie einen Schwellenwert, um zu bestimmen, ob das Gerät richtig ausgerichtet ist
-            const threshold = 5; // Grad
+      // Berechnung der Mondposition
+      function calculateMoonPosition(latitude, longitude, date) {
+        const observer = new Astronomy.Observer(latitude, longitude);
+        const time = Astronomy.MakeTime(date);
+        const moonPosition = Astronomy.Equator("Moon", time, observer, true, true);
+        return moonPosition.hor;
+      }
 
-            // Überlagern Sie das Overlay entsprechend der Differenz
-            overlay.innerHTML = '';
-            if (Math.abs(azimuthDiff) > threshold || Math.abs(altitudeDiff) > threshold) {
-                const direction = document.createElement('div');
-                direction.classList.add('highlight');
-                direction.style.position = 'absolute';
+      // Aktualisierung der Mondposition
+      function updateMoonPosition() {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            const { latitude, longitude } = position.coords;
+            moonPosition = calculateMoonPosition(latitude, longitude, new Date());
 
-                if (azimuthDiff > threshold) {
-                    direction.style.right = '0';
-                    direction.style.top = '50%';
-                } else if (azimuthDiff < -threshold) {
-                    direction.style.left = '0';
-                    direction.style.top = '50%';
-                }
+            gpsElement.textContent = `Lat: ${latitude.toFixed(4)}, Lon: ${longitude.toFixed(4)}`;
 
-                if (altitudeDiff > threshold) {
-                    direction.style.top = '0';
-                    direction.style.left = '50%';
-                } else if (altitudeDiff < -threshold) {
-                    direction.style.bottom = '0';
-                    direction.style.left = '50%';
-                }
+            console.log("Mond-Azimut: ", moonPosition.azimuth);
+            console.log("Mond-Höhe: ", moonPosition.altitude);
+          },
+          (err) => {
+            console.error("Fehler beim Abrufen der GPS-Daten: ", err);
+            gpsElement.textContent = "GPS wird gesucht...";
+          }
+        );
+      }
 
-                overlay.appendChild(direction);
-            }
+      // Orientation und Bewegungssensoren
+      window.addEventListener("deviceorientation", (event) => {
+        currentOrientation.alpha = event.alpha; // Kompassrichtung
+        currentOrientation.beta = event.beta; // Neigung nach vorne/hinten
+        currentOrientation.gamma = event.gamma; // Neigung seitlich
+
+        compassElement.textContent = `${currentOrientation.alpha.toFixed(2)}°`;
+        tiltElement.textContent = `β: ${currentOrientation.beta.toFixed(2)}°, γ: ${currentOrientation.gamma.toFixed(2)}°`;
+
+        updateOverlay();
+      });
+
+      function updateOverlay() {
+        // Berechnen Sie die Differenz zwischen der aktuellen Ausrichtung des Geräts und der Position des Mondes
+        const azimuthDiff = currentOrientation.alpha - moonPosition.azimuth;
+        const altitudeDiff = currentOrientation.beta - moonPosition.altitude;
+
+        // Setzen Sie einen Schwellenwert, um zu bestimmen, ob das Gerät richtig ausgerichtet ist
+        const threshold = 5; // Grad
+
+        // Überlagern Sie das Overlay entsprechend der Differenz
+        overlay.innerHTML = "";
+        if (Math.abs(azimuthDiff) > threshold || Math.abs(altitudeDiff) > threshold) {
+          const direction = document.createElement("div");
+          direction.classList.add("highlight");
+          direction.style.position = "absolute";
+
+          if (azimuthDiff > threshold) {
+            direction.style.right = "0";
+            direction.style.top = "50%";
+          } else if (azimuthDiff < -threshold) {
+            direction.style.left = "0";
+            direction.style.top = "50%";
+          }
+
+          if (altitudeDiff > threshold) {
+            direction.style.top = "0";
+            direction.style.left = "50%";
+          } else if (altitudeDiff < -threshold) {
+            direction.style.bottom = "0";
+            direction.style.left = "50%";
+          }
+
+          overlay.appendChild(direction);
         }
+      }
 
-        // Aktualisierung der Mondposition in regelmäßigen Abständen
-        setInterval(updateMoonPosition, 60000);
-        updateMoonPosition();
+      // Aktualisierung der Mondposition in regelmäßigen Abständen
+      setInterval(updateMoonPosition, 60000);
+      updateMoonPosition();
     </script>
-</body>
+  </body>
 </html>
