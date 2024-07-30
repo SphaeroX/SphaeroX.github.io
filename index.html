@@ -98,19 +98,6 @@
         const centerX = overlay.width / 2;
         const centerY = overlay.height / 2;
 
-        // Kompass-Pfeil zeichnen
-        ctx.save();
-        ctx.translate(centerX, centerY);
-        ctx.rotate((heading * Math.PI) / 180);
-        ctx.beginPath();
-        ctx.moveTo(0, -50);
-        ctx.lineTo(-10, 0);
-        ctx.lineTo(10, 0);
-        ctx.closePath();
-        ctx.fillStyle = "rgba(255, 0, 0, 0.7)";
-        ctx.fill();
-        ctx.restore();
-
         // Mond-Position als Text anzeigen
         const relativeAzimuth = (moonAzimuth - heading + 360) % 360;
         const horizontalPosition = relativeAzimuth < 90 || relativeAzimuth > 270 ? "rechts" : "links";
@@ -118,8 +105,9 @@
 
         ctx.font = "20px Arial";
         ctx.fillStyle = "white";
-        ctx.textAlign = "center";
-        ctx.fillText(`Mond: ${horizontalPosition}, ${verticalPosition}`, centerX, overlay.height - 30);
+        ctx.textAlign = "left";
+        ctx.fillText(`Mond: Azimut ${moonAzimuth.toFixed(2)}°, Höhe ${moonAltitude.toFixed(2)}°`, 20, overlay.height - 60);
+        ctx.fillText(`Position: ${horizontalPosition}, ${verticalPosition}`, 20, overlay.height - 30);
       }
 
       // Bewegungssensoren
