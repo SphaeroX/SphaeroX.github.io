@@ -1,142 +1,44 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Mond-Finder</title>
+    <title>Smartphone Sensor Data</title>
     <style>
       body {
-        margin: 0;
-        padding: 0;
         font-family: Arial, sans-serif;
+        text-align: center;
       }
-      #video-container {
-        position: relative;
-        width: 100vw;
-        height: 100vh;
-      }
-      #camera-feed {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-      }
-      #overlay {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-      }
-      #info {
-        position: absolute;
-        top: 5px;
-        left: 5px;
-        background: rgba(0, 0, 0, 0.5);
-        color: white;
-        padding: 10px;
+      #compass,
+      #tilt {
+        font-size: 24px;
+        margin: 20px 0;
       }
     </style>
   </head>
   <body>
-    <div id="video-container">
-      <video id="camera-feed" autoplay playsinline></video>
-      <canvas id="overlay"></canvas>
-      <div id="info"></div>
-    </div>
+    <h1>Smartphone Sensor Data</h1>
+    <div id="compass">Kompass: -- Grad</div>
+    <div id="tilt">Neigung: -- Grad</div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
     <script>
-      let lat, lon, heading, pitch, roll;
-      let positionAccurate = false;
-
-      const video = document.getElementById("camera-feed");
-      const overlay = document.getElementById("overlay");
-      const ctx = overlay.getContext("2d");
-      const info = document.getElementById("info");
-
-      async function startCamera() {
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-          video.srcObject = stream;
-        } catch (err) {
-          console.error("Kamera-Fehler:", err);
-          info.textContent = "Kamera konnte nicht gestartet werden.";
-        }
-      }
-
-      function getLocation() {
-        if (navigator.geolocation) {
-          navigator.geolocation.watchPosition(updatePosition, handleLocationError);
-        } else {
-          info.textContent = "Geolocation wird nicht unterstützt.";
-        }
-      }
-
-      function updatePosition(position) {
-        lat = position.coords.latitude;
-        lon = position.coords.longitude;
-
-        if (position.coords.accuracy <= 50) {
-          // Genauigkeit von 50 Metern oder besser
-          positionAccurate = true;
-          updateMoonPosition();
-        } else {
-          info.textContent = "Warte auf genauere Positionsdaten...";
-        }
-      }
-
-      function handleLocationError(error) {
-        console.error("Standort-Fehler:", error);
-        info.textContent = "Standort konnte nicht ermittelt werden.";
-      }
-
-      function updateMoonPosition() {
-        if (!positionAccurate) {
-          info.textContent = "Genaue Position noch nicht verfügbar.";
-          return;
-        } else {
-          info.textContent = "";
-        }
-
-        const moonPosition = SunCalc.getMoonPosition(new Date(), lat, lon);
-        const moonAzimuth = (moonPosition.azimuth * 180) / Math.PI;
-        const moonAltitude = (moonPosition.altitude * 180) / Math.PI;
-        drawOverlay(moonAzimuth, moonAltitude);
-      }
-
-      function drawOverlay(moonAzimuth, moonAltitude) {
-        ctx.clearRect(0, 0, overlay.width, overlay.height);
-
-        ctx.font = "20px Arial";
-        ctx.fillStyle = "white";
-        ctx.textAlign = "left";
-        ctx.fillText(`Mond: Azimut ${moonAzimuth.toFixed(2)}°, Höhe ${moonAltitude.toFixed(2)}°`, 20, overlay.height - 60);
-        ctx.fillText(`Kamera: Azimut ${heading.toFixed(2)}°, Neigung ${pitch.toFixed(2)}°`, 20, overlay.height - 30);
-      }
+      const compassElement = document.getElementById("compass");
+      const tiltElement = document.getElementById("tilt");
 
       function handleOrientation(event) {
-        heading = event.alpha || 0; // Kompass-Richtung
-        pitch = event.beta || 0; // Neigung vorne/hinten
-        roll = event.gamma || 0; // Neigung links/rechts
-        updateMoonPosition();
+        const alpha = event.alpha ? Math.round(event.alpha) : 0;
+        const beta = event.beta ? Math.round(event.beta) : 0;
+        const gamma = event.gamma ? Math.round(event.gamma) : 0;
+
+        compassElement.textContent = `Kompass: ${alpha} Grad`;
+        tiltElement.textContent = `Neigung: X: ${beta}°, Y: ${gamma}°`;
       }
 
-      function init() {
-        startCamera();
-        getLocation();
+      if (window.DeviceOrientationEvent) {
         window.addEventListener("deviceorientation", handleOrientation);
-
-        function resizeCanvas() {
-          overlay.width = video.clientWidth;
-          overlay.height = video.clientHeight;
-        }
-        window.addEventListener("resize", resizeCanvas);
-        resizeCanvas();
-
-        setInterval(updateMoonPosition, 1000);
+      } else {
+        alert("Ihr Gerät unterstützt die Orientierungssensoren nicht.");
       }
-
-      init();
     </script>
   </body>
 </html>
