@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Moon Tracker App</title>
+    <title>Sky Tracker App</title>
     <style>
       body,
       html {
@@ -25,6 +25,12 @@
         background-color: rgba(0, 0, 0, 0.5);
         padding: 10px;
         font-family: Arial, sans-serif;
+      }
+      #targetSelect {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        padding: 10px;
       }
       .guide {
         position: absolute;
@@ -60,6 +66,16 @@
   <body>
     <video id="cameraView" autoplay playsinline></video>
     <div id="overlay"></div>
+    <select id="targetSelect">
+      <option value="moon">Moon</option>
+      <option value="mercury">Mercury</option>
+      <option value="venus">Venus</option>
+      <option value="mars">Mars</option>
+      <option value="jupiter">Jupiter</option>
+      <option value="saturn">Saturn</option>
+      <option value="uranus">Uranus</option>
+      <option value="neptune">Neptune</option>
+    </select>
     <div id="leftGuide" class="guide"></div>
     <div id="rightGuide" class="guide"></div>
     <div id="topGuide" class="guide"></div>
@@ -69,6 +85,7 @@
     <script>
       const cameraView = document.getElementById("cameraView");
       const overlay = document.getElementById("overlay");
+      const targetSelect = document.getElementById("targetSelect");
       const guides = {
         left: document.getElementById("leftGuide"),
         right: document.getElementById("rightGuide"),
@@ -77,7 +94,8 @@
       };
 
       let currentPosition = null;
-      let moonPosition = null;
+      let targetPosition = null;
+      let target = 'moon';
 
       function startCamera() {
         navigator.mediaDevices
@@ -104,25 +122,53 @@
         });
       }
 
-      function calculateMoonPosition(latitude, longitude) {
-        const moonPos = SunCalc.getMoonPosition(new Date(), latitude, longitude);
+      function calculateTargetPosition(target, latitude, longitude) {
+        const date = new Date();
+        let position;
+        switch(target) {
+          case 'mercury':
+            position = SunCalc.getPosition(date, latitude, longitude, 'mercury');
+            break;
+          case 'venus':
+            position = SunCalc.getPosition(date, latitude, longitude, 'venus');
+            break;
+          case 'mars':
+            position = SunCalc.getPosition(date, latitude, longitude, 'mars');
+            break;
+          case 'jupiter':
+            position = SunCalc.getPosition(date, latitude, longitude, 'jupiter');
+            break;
+          case 'saturn':
+            position = SunCalc.getPosition(date, latitude, longitude, 'saturn');
+            break;
+          case 'uranus':
+            position = SunCalc.getPosition(date, latitude, longitude, 'uranus');
+            break;
+          case 'neptune':
+            position = SunCalc.getPosition(date, latitude, longitude, 'neptune');
+            break;
+          case 'moon':
+          default:
+            position = SunCalc.getMoonPosition(date, latitude, longitude);
+            break;
+        }
         return {
-          azimuth: (moonPos.azimuth * 180) / Math.PI,
-          altitude: (moonPos.altitude * 180) / Math.PI,
+          azimuth: (position.azimuth * 180) / Math.PI,
+          altitude: (position.altitude * 180) / Math.PI,
         };
       }
 
-      function updateOverlay(compass, tilt, moonDirection) {
+      function updateOverlay(compass, tilt, targetDirection) {
         overlay.innerHTML = `
-                Compass: ${compass.toFixed(2)}°<br>
-                Tilt: ${tilt.toFixed(2)}°<br>
-                Moon Direction: ${moonDirection.azimuth.toFixed(2)}°, ${moonDirection.altitude.toFixed(2)}°
-            `;
+          Compass: ${compass.toFixed(2)}°<br>
+          Tilt: ${tilt.toFixed(2)}°<br>
+          Target Direction: ${targetDirection.azimuth.toFixed(2)}°, ${targetDirection.altitude.toFixed(2)}°
+        `;
       }
 
-      function updateGuides(deviceOrientation, moonPosition) {
-        const azimuthDiff = moonPosition.azimuth - deviceOrientation.alpha;
-        const altitudeDiff = moonPosition.altitude - deviceOrientation.beta;
+      function updateGuides(deviceOrientation, targetPosition) {
+        const azimuthDiff = targetPosition.azimuth - deviceOrientation.alpha;
+        const altitudeDiff = targetPosition.altitude - deviceOrientation.beta;
 
         guides.left.style.display = azimuthDiff < -5 ? "block" : "none";
         guides.right.style.display = azimuthDiff > 5 ? "block" : "none";
@@ -131,10 +177,14 @@
       }
 
       window.addEventListener("deviceorientation", (event) => {
-        if (currentPosition && moonPosition) {
-          updateOverlay(event.alpha, event.beta, moonPosition);
-          updateGuides(event, moonPosition);
+        if (currentPosition && targetPosition) {
+          updateOverlay(event.alpha, event.beta, targetPosition);
+          updateGuides(event, targetPosition);
         }
+      });
+
+      targetSelect.addEventListener("change", (event) => {
+        target = event.target.value;
       });
 
       async function init() {
@@ -142,7 +192,7 @@
         try {
           currentPosition = await getLocation();
           setInterval(() => {
-            moonPosition = calculateMoonPosition(currentPosition.latitude, currentPosition.longitude);
+            targetPosition = calculateTargetPosition(target, currentPosition.latitude, currentPosition.longitude);
           }, 1000);
         } catch (error) {
           console.error("Error getting location:", error);
