@@ -33,8 +33,15 @@
         const video = document.getElementById('video');
         const instructions = document.getElementById('instructions');
 
-        // Access the webcam
-        navigator.mediaDevices.getUserMedia({ video: true })
+        // Access the front camera
+        navigator.mediaDevices.enumerateDevices()
+            .then(devices => {
+                const videoDevices = devices.filter(device => device.kind === 'videoinput');
+                const frontCamera = videoDevices.find(device => device.label.toLowerCase().includes('front')) || videoDevices[0];
+                return navigator.mediaDevices.getUserMedia({ 
+                    video: { deviceId: frontCamera.deviceId } 
+                });
+            })
             .then(stream => {
                 video.srcObject = stream;
             })
@@ -80,17 +87,28 @@
             const solarAltitude = Math.asin(Math.sin(declination * Math.PI / 180) * Math.sin(latitude * Math.PI / 180) + Math.cos(declination * Math.PI / 180) * Math.cos(latitude * Math.PI / 180) * Math.cos(solarHourAngle * Math.PI / 180)) * 180 / Math.PI;
             const solarAzimuth = Math.acos((Math.sin(declination * Math.PI / 180) - Math.sin(solarAltitude * Math.PI / 180) * Math.sin(latitude * Math.PI / 180)) / (Math.cos(solarAltitude * Math.PI / 180) * Math.cos(latitude * Math.PI / 180))) * 180 / Math.PI;
             
-            const deviceAzimuth = orientation.alpha;
+            const deviceAzimuth = (orientation.alpha + 360) % 360;
             const deviceAltitude = orientation.beta - 90;
+            const screenOrientation = window.screen.orientation.type.includes('landscape') ? 'landscape' : 'portrait';
 
             let direction = '';
 
-            if (Math.abs(solarAzimuth - deviceAzimuth) > 10) {
-                direction += solarAzimuth > deviceAzimuth ? 'rechts' : 'links';
-            }
+            if (screenOrientation === 'portrait') {
+                if (Math.abs(solarAzimuth - deviceAzimuth) > 10) {
+                    direction += solarAzimuth > deviceAzimuth ? 'rechts' : 'links';
+                }
 
-            if (Math.abs(solarAltitude - deviceAltitude) > 10) {
-                direction += solarAltitude > deviceAltitude ? ' hoch' : ' runter';
+                if (Math.abs(solarAltitude - deviceAltitude) > 10) {
+                    direction += solarAltitude > deviceAltitude ? ' hoch' : ' runter';
+                }
+            } else {
+                if (Math.abs(solarAzimuth - deviceAzimuth) > 10) {
+                    direction += solarAzimuth > deviceAzimuth ? 'rechts' : 'links';
+                }
+
+                if (Math.abs(solarAltitude - deviceAltitude) > 10) {
+                    direction += solarAltitude > deviceAltitude ? ' hoch' : ' runter';
+                }
             }
 
             instructions.textContent = direction === '' ? 'Perfekt ausgerichtet!' : `Weiter nach ${direction.trim()}.`;
