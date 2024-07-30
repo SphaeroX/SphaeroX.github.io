@@ -47,6 +47,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
     <script>
       let lat, lon, heading, pitch, roll;
+      let positionAccurate = false;
+
       const video = document.getElementById("camera-feed");
       const overlay = document.getElementById("overlay");
       const ctx = overlay.getContext("2d");
@@ -73,7 +75,14 @@
       function updatePosition(position) {
         lat = position.coords.latitude;
         lon = position.coords.longitude;
-        updateMoonPosition();
+
+        if (position.coords.accuracy <= 50) {
+          // Genauigkeit von 50 Metern oder besser
+          positionAccurate = true;
+          updateMoonPosition();
+        } else {
+          info.textContent = "Warte auf genauere Positionsdaten...";
+        }
       }
 
       function handleLocationError(error) {
@@ -82,6 +91,13 @@
       }
 
       function updateMoonPosition() {
+        if (!positionAccurate) {
+          info.textContent = "Genaue Position noch nicht verfügbar.";
+          return;
+        } else {
+          info.textContent = "";
+        }
+
         const moonPosition = SunCalc.getMoonPosition(new Date(), lat, lon);
         const moonAzimuth = (moonPosition.azimuth * 180) / Math.PI;
         const moonAltitude = (moonPosition.altitude * 180) / Math.PI;
