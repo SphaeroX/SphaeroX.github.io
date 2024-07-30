@@ -10,7 +10,8 @@
         text-align: center;
       }
       #compass,
-      #tilt {
+      #tilt,
+      #gps {
         font-size: 24px;
         margin: 20px 0;
       }
@@ -20,10 +21,12 @@
     <h1>Smartphone Sensor Data</h1>
     <div id="compass">Kompass: -- Grad</div>
     <div id="tilt">Neigung: -- Grad</div>
+    <div id="gps">GPS: --</div>
 
     <script>
       const compassElement = document.getElementById("compass");
       const tiltElement = document.getElementById("tilt");
+      const gpsElement = document.getElementById("gps");
 
       function handleOrientation(event) {
         const alpha = event.alpha ? Math.round(event.alpha) : 0;
@@ -34,10 +37,24 @@
         tiltElement.textContent = `Neigung: X: ${beta}°, Y: ${gamma}°`;
       }
 
+      function handleLocation(position) {
+        const latitude = position.coords.latitude.toFixed(6);
+        const longitude = position.coords.longitude.toFixed(6);
+        const accuracy = position.coords.accuracy.toFixed(2);
+
+        gpsElement.textContent = `GPS: Lat: ${latitude}, Lon: ${longitude}, Genauigkeit: ${accuracy}m`;
+      }
+
       if (window.DeviceOrientationEvent) {
         window.addEventListener("deviceorientation", handleOrientation);
       } else {
         alert("Ihr Gerät unterstützt die Orientierungssensoren nicht.");
+      }
+
+      if ("geolocation" in navigator) {
+        navigator.geolocation.watchPosition(handleLocation);
+      } else {
+        alert("Ihr Gerät unterstützt keine Geolokalisierung.");
       }
     </script>
   </body>
