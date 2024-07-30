@@ -3,59 +3,153 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Smartphone Sensor Data</title>
+    <title>Moon Tracker App</title>
     <style>
-      body {
-        font-family: Arial, sans-serif;
-        text-align: center;
+      body,
+      html {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        overflow: hidden;
       }
-      #compass,
-      #tilt,
-      #gps {
-        font-size: 24px;
-        margin: 20px 0;
+      #cameraView {
+        position: relative;
+        width: 100%;
+        height: 100%;
+      }
+      #overlay {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        color: white;
+        background-color: rgba(0, 0, 0, 0.5);
+        padding: 10px;
+        font-family: Arial, sans-serif;
+      }
+      .guide {
+        position: absolute;
+        background-color: blue;
+        opacity: 0.5;
+      }
+      #leftGuide,
+      #rightGuide {
+        width: 20px;
+        height: 100%;
+        top: 0;
+      }
+      #topGuide,
+      #bottomGuide {
+        width: 100%;
+        height: 20px;
+        left: 0;
+      }
+      #leftGuide {
+        left: 0;
+      }
+      #rightGuide {
+        right: 0;
+      }
+      #topGuide {
+        top: 0;
+      }
+      #bottomGuide {
+        bottom: 0;
       }
     </style>
   </head>
   <body>
-    <h1>Smartphone Sensor Data</h1>
-    <div id="compass">Kompass: -- Grad</div>
-    <div id="tilt">Neigung: -- Grad</div>
-    <div id="gps">GPS: --</div>
+    <video id="cameraView" autoplay playsinline></video>
+    <div id="overlay"></div>
+    <div id="leftGuide" class="guide"></div>
+    <div id="rightGuide" class="guide"></div>
+    <div id="topGuide" class="guide"></div>
+    <div id="bottomGuide" class="guide"></div>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.8.0/suncalc.min.js"></script>
     <script>
-      const compassElement = document.getElementById("compass");
-      const tiltElement = document.getElementById("tilt");
-      const gpsElement = document.getElementById("gps");
+      const cameraView = document.getElementById("cameraView");
+      const overlay = document.getElementById("overlay");
+      const guides = {
+        left: document.getElementById("leftGuide"),
+        right: document.getElementById("rightGuide"),
+        top: document.getElementById("topGuide"),
+        bottom: document.getElementById("bottomGuide"),
+      };
 
-      function handleOrientation(event) {
-        const alpha = event.alpha ? Math.round(event.alpha) : 0;
-        const beta = event.beta ? Math.round(event.beta) : 0;
-        const gamma = event.gamma ? Math.round(event.gamma) : 0;
+      let currentPosition = null;
+      let moonPosition = null;
 
-        compassElement.textContent = `Kompass: ${alpha} Grad`;
-        tiltElement.textContent = `Neigung: X: ${beta}°, Y: ${gamma}°`;
+      function startCamera() {
+        navigator.mediaDevices
+          .getUserMedia({ video: { facingMode: "environment" } })
+          .then((stream) => {
+            cameraView.srcObject = stream;
+          })
+          .catch((error) => {
+            console.error("Error accessing camera:", error);
+          });
       }
 
-      function handleLocation(position) {
-        const latitude = position.coords.latitude.toFixed(6);
-        const longitude = position.coords.longitude.toFixed(6);
-        const accuracy = position.coords.accuracy.toFixed(2);
-
-        gpsElement.textContent = `GPS: Lat: ${latitude}, Lon: ${longitude}, Genauigkeit: ${accuracy}m`;
+      function getLocation() {
+        return new Promise((resolve, reject) => {
+          navigator.geolocation.watchPosition(
+            (position) => {
+              if (position.coords.accuracy <= 100) {
+                resolve(position.coords);
+              }
+            },
+            (error) => reject(error),
+            { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+          );
+        });
       }
 
-      if (window.DeviceOrientationEvent) {
-        window.addEventListener("deviceorientation", handleOrientation);
-      } else {
-        alert("Ihr Gerät unterstützt die Orientierungssensoren nicht.");
+      function calculateMoonPosition(latitude, longitude) {
+        const moonPos = SunCalc.getMoonPosition(new Date(), latitude, longitude);
+        return {
+          azimuth: (moonPos.azimuth * 180) / Math.PI,
+          altitude: (moonPos.altitude * 180) / Math.PI,
+        };
       }
 
-      if ("geolocation" in navigator) {
-        navigator.geolocation.watchPosition(handleLocation);
-      } else {
-        alert("Ihr Gerät unterstützt keine Geolokalisierung.");
+      function updateOverlay(compass, tilt, moonDirection) {
+        overlay.innerHTML = `
+                Compass: ${compass.toFixed(2)}°<br>
+                Tilt: ${tilt.toFixed(2)}°<br>
+                Moon Direction: ${moonDirection.azimuth.toFixed(2)}°, ${moonDirection.altitude.toFixed(2)}°
+            `;
       }
+
+      function updateGuides(deviceOrientation, moonPosition) {
+        const azimuthDiff = moonPosition.azimuth - deviceOrientation.alpha;
+        const altitudeDiff = moonPosition.altitude - deviceOrientation.beta;
+
+        guides.left.style.display = azimuthDiff < -5 ? "block" : "none";
+        guides.right.style.display = azimuthDiff > 5 ? "block" : "none";
+        guides.top.style.display = altitudeDiff > 5 ? "block" : "none";
+        guides.bottom.style.display = altitudeDiff < -5 ? "block" : "none";
+      }
+
+      window.addEventListener("deviceorientation", (event) => {
+        if (currentPosition && moonPosition) {
+          updateOverlay(event.alpha, event.beta, moonPosition);
+          updateGuides(event, moonPosition);
+        }
+      });
+
+      async function init() {
+        startCamera();
+        try {
+          currentPosition = await getLocation();
+          setInterval(() => {
+            moonPosition = calculateMoonPosition(currentPosition.latitude, currentPosition.longitude);
+          }, 1000);
+        } catch (error) {
+          console.error("Error getting location:", error);
+        }
+      }
+
+      init();
     </script>
   </body>
 </html>
