@@ -61,6 +61,69 @@
         navigator.mediaDevices.enumerateDevices()
             .then(deviceInfos => {
                 devices = deviceInfos.filter(device => device.kind === 'videoinput');
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Himmelskörper-Tracker</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            font-family: Arial, sans-serif;
+        }
+        video {
+            display: block;
+            width: 80%;
+            max-width: 600px;
+        }
+        #instructions {
+            margin-top: 20px;
+            font-size: 1.2em;
+        }
+        select {
+            margin: 10px;
+            padding: 5px;
+            font-size: 1em;
+        }
+    </style>
+</head>
+<body>
+    <select id="targetSelector">
+        <option value="sun">Sonne</option>
+        <option value="moon">Mond</option>
+        <option value="mercury">Merkur</option>
+        <option value="venus">Venus</option>
+        <option value="mars">Mars</option>
+        <option value="jupiter">Jupiter</option>
+        <option value="saturn">Saturn</option>
+        <option value="uranus">Uranus</option>
+        <option value="neptune">Neptun</option>
+    </select>
+    
+    <select id="cameraSelector"></select>
+    
+    <video id="video" autoplay></video>
+    <div id="instructions">Richte dein Handy zum gewählten Himmelskörper aus...</div>
+    
+    <script>
+        const video = document.getElementById('video');
+        const instructions = document.getElementById('instructions');
+        const targetSelector = document.getElementById('targetSelector');
+        const cameraSelector = document.getElementById('cameraSelector');
+        let selectedTarget = 'sun';
+        let devices = [];
+        let currentStream = null;
+
+        // Access the available cameras and populate the camera selector
+        navigator.mediaDevices.enumerateDevices()
+            .then(deviceInfos => {
+                devices = deviceInfos.filter(device => device.kind === 'videoinput');
                 devices.forEach((device, index) => {
                     const option = document.createElement('option');
                     option.value = device.deviceId;
@@ -138,8 +201,20 @@
                 const solarHourAngle = 15 * (timeCorrection / 60);
                 celestialAltitude = Math.asin(Math.sin(declination * Math.PI / 180) * Math.sin(latitude * Math.PI / 180) + Math.cos(declination * Math.PI / 180) * Math.cos(latitude * Math.PI / 180) * Math.cos(solarHourAngle * Math.PI / 180)) * 180 / Math.PI;
                 celestialAzimuth = Math.acos((Math.sin(declination * Math.PI / 180) - Math.sin(celestialAltitude * Math.PI / 180) * Math.sin(latitude * Math.PI / 180)) / (Math.cos(celestialAltitude * Math.PI / 180) * Math.cos(latitude * Math.PI / 180))) * 180 / Math.PI;
+            } else if (selectedTarget === 'moon') {
+                // Simple approximation for Moon's position
+                const d = dayOfYear + hours / 24;
+                const L = 218.316 + 13.176396 * d;
+                const M = 134.963 + 13.064993 * d;
+                const F = 93.272 + 13.229350 * d;
+                const l = L + 6.289 * Math.sin(M * Math.PI / 180);
+                const b = 5.128 * Math.sin(F * Math.PI / 180);
+                const lambda = l * Math.PI / 180;
+                const beta = b * Math.PI / 180;
+                celestialAltitude = Math.asin(Math.sin(latitude * Math.PI / 180) * Math.sin(beta) + Math.cos(latitude * Math.PI / 180) * Math.cos(beta) * Math.cos(lambda - longitude * Math.PI / 180)) * 180 / Math.PI;
+                celestialAzimuth = Math.atan2(Math.sin(lambda - longitude * Math.PI / 180), Math.cos(latitude * Math.PI / 180) * Math.tan(beta) - Math.sin(latitude * Math.PI / 180) * Math.cos(lambda - longitude * Math.PI / 180)) * 180 / Math.PI;
             } else {
-                // Placeholder for celestial calculations for the moon and other planets
+                // Placeholder for celestial calculations for other planets
                 celestialAltitude = 45; // Dummy value
                 celestialAzimuth = 90; // Dummy value
             }
@@ -152,7 +227,7 @@
 
             if (screenOrientation === 'portrait') {
                 if (Math.abs(celestialAzimuth - deviceAzimuth) > 10) {
-                    direction += celestialAzimuth > deviceAzimuth ? 'rechts' : 'links';
+                    direction += celestialAzimuth > deviceAzimuth ? 'links' : 'rechts';
                 }
 
                 if (Math.abs(celestialAltitude - deviceAltitude) > 10) {
@@ -160,7 +235,7 @@
                 }
             } else {
                 if (Math.abs(celestialAzimuth - deviceAzimuth) > 10) {
-                    direction += celestialAzimuth > deviceAzimuth ? 'rechts' : 'links';
+                    direction += celestialAzimuth > deviceAzimuth ? 'links' : 'rechts';
                 }
 
                 if (Math.abs(celestialAltitude - deviceAltitude) > 10) {
