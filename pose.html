@@ -14,23 +14,13 @@
             margin-top: 20px;
             font-size: 20px;
         }
-        #controls {
-            text-align: center;
-            margin-top: 20px;
-        }
     </style>
 </head>
 <body>
     <h1>Fahrrad Pose Erkennung</h1>
-    <div id="controls">
-        <label for="cameraSelect">Kamera auswählen:</label>
-        <select id="cameraSelect"></select>
-        <button id="resetButton">Reset</button>
-    </div>
     <video id="video" width="640" height="480" autoplay></video>
     <canvas id="canvas" width="640" height="480"></canvas>
     <div id="angleDisplay">Winkel: --°</div>
-    <div id="minMaxDisplay">Min Winkel: --° | Max Winkel: --°</div>
 
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/posenet"></script>
@@ -39,40 +29,11 @@
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
         const angleDisplay = document.getElementById('angleDisplay');
-        const minMaxDisplay = document.getElementById('minMaxDisplay');
-        const cameraSelect = document.getElementById('cameraSelect');
-        const resetButton = document.getElementById('resetButton');
-
-        let minAngle = Infinity;
-        let maxAngle = -Infinity;
 
         // Kamera aktivieren
         async function setupCamera() {
-            const devices = await navigator.mediaDevices.enumerateDevices();
-            const videoDevices = devices.filter(device => device.kind === 'videoinput');
-
-            videoDevices.forEach((device, index) => {
-                const option = document.createElement('option');
-                option.value = device.deviceId;
-                option.text = device.label || `Kamera ${index + 1}`;
-                cameraSelect.appendChild(option);
-            });
-
-            cameraSelect.addEventListener('change', () => {
-                if (video.srcObject) {
-                    video.srcObject.getTracks().forEach(track => track.stop());
-                }
-                startCamera(cameraSelect.value);
-            });
-
-            if (videoDevices.length > 0) {
-                startCamera(videoDevices[0].deviceId);
-            }
-        }
-
-        async function startCamera(deviceId) {
             const stream = await navigator.mediaDevices.getUserMedia({
-                video: { deviceId: { exact: deviceId } }
+                video: true
             });
             video.srcObject = stream;
             return new Promise((resolve) => {
@@ -113,11 +74,6 @@
 
                 const angle = calculateAngle(ankle.position, knee.position, hip.position);
                 angleDisplay.textContent = `Winkel: ${angle.toFixed(2)}°`;
-
-                if (angle < minAngle) minAngle = angle;
-                if (angle > maxAngle) maxAngle = angle;
-
-                minMaxDisplay.textContent = `Min Winkel: ${minAngle.toFixed(2)}° | Max Winkel: ${maxAngle.toFixed(2)}°`;
             }
         }
 
@@ -148,12 +104,6 @@
             const angle = Math.acos(dotProduct / (magnitudeAB * magnitudeBC));
             return angle * (180 / Math.PI);
         }
-
-        resetButton.addEventListener('click', () => {
-            minAngle = Infinity;
-            maxAngle = -Infinity;
-            minMaxDisplay.textContent = `Min Winkel: --° | Max Winkel: --°`;
-        });
 
         // Kamera einrichten und Pose-Erkennung starten
         setupCamera().then(detectPose);
