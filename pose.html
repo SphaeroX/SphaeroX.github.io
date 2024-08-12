@@ -5,13 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Fahrrad Pose Erkennung</title>
     <style>
-        #video {
+        #video, #canvas {
             display: block;
             margin: 0 auto;
         }
-        #canvas {
-            display: block;
-            margin: 0 auto;
+        #angleDisplay {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 20px;
         }
     </style>
 </head>
@@ -19,12 +20,15 @@
     <h1>Fahrrad Pose Erkennung</h1>
     <video id="video" width="640" height="480" autoplay></video>
     <canvas id="canvas" width="640" height="480"></canvas>
+    <div id="angleDisplay">Winkel: --°</div>
+
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/posenet"></script>
     <script>
         const video = document.getElementById('video');
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
+        const angleDisplay = document.getElementById('angleDisplay');
 
         // Kamera aktivieren
         async function setupCamera() {
@@ -69,7 +73,7 @@
                 drawLine(knee.position, hip.position);
 
                 const angle = calculateAngle(ankle.position, knee.position, hip.position);
-                console.log(`Winkel: ${angle.toFixed(2)}°`);
+                angleDisplay.textContent = `Winkel: ${angle.toFixed(2)}°`;
             }
         }
 
