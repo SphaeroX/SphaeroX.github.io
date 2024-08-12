@@ -30,13 +30,6 @@
         const ctx = canvas.getContext('2d');
         const angleDisplay = document.getElementById('angleDisplay');
 
-        const bufferSize = 10;
-        const positionBuffer = {
-            ankle: [],
-            knee: [],
-            hip: []
-        };
-
         // Kamera aktivieren
         async function setupCamera() {
             const stream = await navigator.mediaDevices.getUserMedia({
@@ -72,21 +65,15 @@
             const hip = keypoints.find(point => point.part === 'leftHip');
 
             if (ankle && knee && hip) {
-                if (isStable(ankle.position, 'ankle') && isStable(knee.position, 'knee') && isStable(hip.position, 'hip')) {
-                    drawPoint(ankle.position);
-                    drawPoint(knee.position);
-                    drawPoint(hip.position);
+                drawPoint(ankle.position);
+                drawPoint(knee.position);
+                drawPoint(hip.position);
 
-                    drawLine(ankle.position, knee.position);
-                    drawLine(knee.position, hip.position);
+                drawLine(ankle.position, knee.position);
+                drawLine(knee.position, hip.position);
 
-                    const angle = calculateAngle(ankle.position, knee.position, hip.position);
-                    angleDisplay.textContent = `Winkel: ${angle.toFixed(2)}°`;
-
-                    updateBuffer(ankle.position, 'ankle');
-                    updateBuffer(knee.position, 'knee');
-                    updateBuffer(hip.position, 'hip');
-                }
+                const angle = calculateAngle(ankle.position, knee.position, hip.position);
+                angleDisplay.textContent = `Winkel: ${angle.toFixed(2)}°`;
             }
         }
 
@@ -116,27 +103,6 @@
 
             const angle = Math.acos(dotProduct / (magnitudeAB * magnitudeBC));
             return angle * (180 / Math.PI);
-        }
-
-        function updateBuffer(position, part) {
-            if (positionBuffer[part].length >= bufferSize) {
-                positionBuffer[part].shift();
-            }
-            positionBuffer[part].push(position);
-        }
-
-        function isStable(position, part) {
-            if (positionBuffer[part].length < bufferSize) {
-                return true;
-            }
-            const avgPosition = positionBuffer[part].reduce((acc, pos) => {
-                return { x: acc.x + pos.x, y: acc.y + pos.y };
-            }, { x: 0, y: 0 });
-            avgPosition.x /= bufferSize;
-            avgPosition.y /= bufferSize;
-
-            const distance = Math.sqrt(Math.pow(position.x - avgPosition.x, 2) + Math.pow(position.y - avgPosition.y, 2));
-            return distance < 20; // Threshold for stability
         }
 
         // Kamera einrichten und Pose-Erkennung starten
