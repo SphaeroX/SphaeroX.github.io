@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BLE Connect</title>
+</head>
+<body>
+    <h1>BLE-Gerät verbinden und auslesen</h1>
+    
+    <button id="connectBtn">Mit BLE-Gerät verbinden</button>
+    
+    <br><br>
+    
+    <textarea id="output" rows="20" cols="80" readonly></textarea>
+    
+    <script>
+        document.getElementById('connectBtn').addEventListener('click', async () => {
+            const output = document.getElementById('output');
+            output.value = 'Verbinde...\n';
+
+            try {
+                const device = await navigator.bluetooth.requestDevice({
+                    acceptAllDevices: true,
+                    optionalServices: [] // Füge hier gewünschte Services hinzu, wenn bekannt
+                });
+
+                output.value += 'Gerät ausgewählt: ' + device.name + '\n';
+                
+                const server = await device.gatt.connect();
+                output.value += 'Verbunden mit GATT-Server.\n';
+
+                const services = await server.getPrimaryServices();
+                output.value += 'Verfügbare Services:\n';
+
+                for (const service of services) {
+                    output.value += `Service: ${service.uuid}\n`;
+
+                    const characteristics = await service.getCharacteristics();
+                    for (const characteristic of characteristics) {
+                        output.value += `  Characteristic: ${characteristic.uuid}\n`;
+
+                        // Optional: Lese den Wert der Characteristic aus, falls lesbar
+                        if (characteristic.properties.read) {
+                            const value = await characteristic.readValue();
+                            const decoder = new TextDecoder('utf-8');
+                            output.value += `    Wert: ${decoder.decode(value)}\n`;
+                        }
+                    }
+                }
+            } catch (error) {
+                output.value += 'Fehler: ' + error + '\n';
+            }
+        });
+    </script>
+</body>
+</html>
