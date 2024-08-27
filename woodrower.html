@@ -1,57 +1,61 @@
 <!DOCTYPE html>
 <html lang="de">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>BLE Connect</title>
-</head>
-<body>
+  </head>
+  <body>
     <h1>BLE-Gerät verbinden und auslesen</h1>
-    
+
     <button id="connectBtn">Mit BLE-Gerät verbinden</button>
-    
-    <br><br>
-    
+
+    <br /><br />
+
     <textarea id="output" rows="20" cols="80" readonly></textarea>
-    
+
     <script>
-        document.getElementById('connectBtn').addEventListener('click', async () => {
-            const output = document.getElementById('output');
-            output.value = 'Verbinde...\n';
+      document.getElementById("connectBtn").addEventListener("click", async () => {
+        const output = document.getElementById("output");
+        output.value = "Verbinde...\n";
 
-            try {
-                const device = await navigator.bluetooth.requestDevice({
-                    acceptAllDevices: true,
-                    optionalServices: [] // Füge hier gewünschte Services hinzu, wenn bekannt
-                });
+        try {
+          // Füge die UUIDs der Services hinzu, die dein Gerät unterstützt
+          const serviceFTMS = 0x1826;
+          const treadmillData = 0x2acd;
 
-                output.value += 'Gerät ausgewählt: ' + device.name + '\n';
-                
-                const server = await device.gatt.connect();
-                output.value += 'Verbunden mit GATT-Server.\n';
+          const device = await navigator.bluetooth.requestDevice({
+            filters: [{ namePrefix: "Domyos" }],
+            optionalServices: [serviceFTMS], // Hier spezifische Service-UUIDs einfügen
+          });
 
-                const services = await server.getPrimaryServices();
-                output.value += 'Verfügbare Services:\n';
+          output.value += "Gerät ausgewählt: " + device.name + "\n";
 
-                for (const service of services) {
-                    output.value += `Service: ${service.uuid}\n`;
+          const server = await device.gatt.connect();
+          output.value += "Verbunden mit GATT-Server.\n";
 
-                    const characteristics = await service.getCharacteristics();
-                    for (const characteristic of characteristics) {
-                        output.value += `  Characteristic: ${characteristic.uuid}\n`;
+          const services = await server.getPrimaryServices();
+          output.value += "Verfügbare Services:\n";
 
-                        // Optional: Lese den Wert der Characteristic aus, falls lesbar
-                        if (characteristic.properties.read) {
-                            const value = await characteristic.readValue();
-                            const decoder = new TextDecoder('utf-8');
-                            output.value += `    Wert: ${decoder.decode(value)}\n`;
-                        }
-                    }
-                }
-            } catch (error) {
-                output.value += 'Fehler: ' + error + '\n';
+          for (const service of services) {
+            output.value += `Service: ${service.uuid}\n`;
+
+            const characteristics = await service.getCharacteristics();
+            for (const characteristic of characteristics) {
+              output.value += `  Characteristic: ${characteristic.uuid}\n`;
+
+              // Optional: Lese den Wert der Characteristic aus, falls lesbar
+              if (characteristic.properties.read) {
+                const value = await characteristic.readValue();
+                const decoder = new TextDecoder("utf-8");
+                output.value += `    Wert: ${decoder.decode(value)}\n`;
+              }
             }
-        });
+          }
+        } catch (error) {
+          output.value += "Fehler: " + error + "\n";
+        }
+      });
     </script>
-</body>
+  </body>
 </html>
