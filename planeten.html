@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Planetensucher</title>
+    <style>
+      /* Stil für die Vollbild-Kameraanzeige */
+      body,
+      html {
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+      }
+      video {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+      #overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+      }
+      #controls {
+        position: fixed;
+        top: 10px;
+        left: 10px;
+        background: rgba(255, 255, 255, 0.8);
+        padding: 10px;
+        border-radius: 8px;
+        z-index: 1000;
+      }
+    </style>
+  </head>
+  <body>
+    <video id="video" autoplay></video>
+    <canvas id="overlay"></canvas>
+
+    <div id="controls">
+      <label for="planet">Himmelskörper:</label>
+      <select id="planet">
+        <option value="sun">Sonne</option>
+        <option value="moon">Mond</option>
+        <option value="mercury">Merkur</option>
+        <option value="venus">Venus</option>
+        <option value="mars">Mars</option>
+        <option value="jupiter">Jupiter</option>
+        <option value="saturn">Saturn</option>
+        <option value="uranus">Uranus</option>
+        <option value="neptune">Neptun</option></select
+      ><br /><br />
+      <label for="threshold">Schwellenwert (°):</label>
+      <input type="number" id="threshold" value="5" min="1" max="180" /><br />
+    </div>
+
+    <!-- Einbinden externer Bibliotheken -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/astronomia/1.12.0/astronomia.min.js"></script>
+
+    <script>
+      // Variablen initialisieren
+      let video = document.getElementById("video");
+      let canvas = document.getElementById("overlay");
+      let ctx = canvas.getContext("2d");
+      let planetSelect = document.getElementById("planet");
+      let thresholdInput = document.getElementById("threshold");
+
+      // Größe des Canvas einstellen
+      function resizeCanvas() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+      }
+      window.addEventListener("resize", resizeCanvas);
+      resizeCanvas();
+
+      // Zugriff auf die Rückkamera
+      navigator.mediaDevices
+        .getUserMedia({ video: { facingMode: { exact: "environment" } }, audio: false })
+        .then(function (stream) {
+          video.srcObject = stream;
+        })
+        .catch(function (err) {
+          console.error("Fehler beim Zugriff auf die Kamera:", err);
+        });
+
+      // GPS-Daten abrufen
+      let latitude, longitude;
+      navigator.geolocation.getCurrentPosition(
+        function (position) {
+          latitude = position.coords.latitude;
+          longitude = position.coords.longitude;
+        },
+        function (err) {
+          console.error("Fehler beim Abrufen der Geolokalisierung:", err);
+        }
+      );
+
+      // Gerätorientierung abrufen
+      let deviceAzimuth, deviceAltitude;
+      window.addEventListener(
+        "deviceorientation",
+        function (event) {
+          // Azimut berechnen
+          let alpha = event.alpha;
+          let beta = event.beta;
+          let gamma = event.gamma;
+
+          // Korrektur für iOS
+          if (typeof event.webkitCompassHeading !== "undefined") {
+            deviceAzimuth = event.webkitCompassHeading;
+          } else {
+            deviceAzimuth = 360 - alpha; // Umwandlung in Grad im Uhrzeigersinn von Norden
+          }
+
+          deviceAltitude = beta; // Neigungswinkel
+          aktualisiereOverlay();
+        },
+        true
+      );
+
+      // Aktualisierung der Anzeige
+      function aktualisiereOverlay() {
+        if (latitude == null || longitude == null || deviceAzimuth == null || deviceAltitude == null) return;
+
+        // Aktuelles Datum und Uhrzeit
+        let jetzt = new Date();
+
+        // Ausgewählten Planeten abrufen
+        let planetName = planetSelect.value;
+
+        // Position des Planeten berechnen
+        let observer = new astronomy.Observer(latitude, longitude, 0);
+        let times = new astronomy.AstroTime(jetzt);
+        let planetPos;
+
+        if (planetName === "sun") {
+          planetPos = astronomy.SunPosition(times, observer);
+        } else if (planetName === "moon") {
+          planetPos = astronomy.MoonPosition(times, observer);
+        } else {
+          planetPos = astronomy.EquatorialCoordinates.of(astronomy.PlanetPosition(planetName, times));
+        }
+
+        // Horizontkoordinaten berechnen
+        let horizontal = astronomy.HorizontalCoordinates.fromEquatorial(planetPos, observer, times);
+
+        let targetAzimuth = horizontal.azimuth;
+        let targetAltitude = horizontal.altitude;
+
+        // Differenz berechnen
+        let azimuthDiff = targetAzimuth - deviceAzimuth;
+        let altitudeDiff = targetAltitude - deviceAltitude;
+
+        // Werte normalisieren
+        azimuthDiff = ((azimuthDiff + 540) % 360) - 180; // Auf Bereich [-180, 180] bringen
+
+        let threshold = parseFloat(thresholdInput.value);
+
+        // Canvas leeren
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Visuelle Hinweise anzeigen
+        if (Math.abs(azimuthDiff) > threshold) {
+          // Links oder rechts drehen
+          let gradient = ctx.createLinearGradient(0, 0, canvas.width, 0);
+          if (azimuthDiff > 0) {
+            // Nach rechts drehen
+            gradient.addColorStop(0, "transparent");
+            gradient.addColorStop(1, "rgba(255, 0, 0, 0.5)");
+          } else {
+            // Nach links drehen
+            gradient.addColorStop(0, "rgba(255, 0, 0, 0.5)");
+            gradient.addColorStop(1, "transparent");
+          }
+          ctx.fillStyle = gradient;
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+        if (Math.abs(altitudeDiff) > threshold) {
+          // Nach oben oder unten neigen
+          let gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+          if (altitudeDiff > 0) {
+            // Nach oben neigen
+            gradient.addColorStop(0, "rgba(0, 0, 255, 0.5)");
+            gradient.addColorStop(1, "transparent");
+          } else {
+            // Nach unten neigen
+            gradient.addColorStop(0, "transparent");
+            gradient.addColorStop(1, "rgba(0, 0, 255, 0.5)");
+          }
+          ctx.fillStyle = gradient;
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+      }
+
+      // Aktualisierung bei Änderung der Auswahl
+      planetSelect.addEventListener("change", aktualisiereOverlay);
+      thresholdInput.addEventListener("change", aktualisiereOverlay);
+    </script>
+  </body>
+</html>
