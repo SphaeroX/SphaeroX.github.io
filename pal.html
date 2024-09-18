@@ -1,83 +1,103 @@
 <!DOCTYPE html>
 <html lang="de">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kalorienverbrauch Berechnung</title>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kalorienbedarf Berechnung</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-        }
-        label {
-            display: block;
-            margin-top: 10px;
-        }
-        input, select {
-            margin-bottom: 10px;
-        }
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+      label,
+      input,
+      select {
+        display: block;
+        margin-bottom: 10px;
+      }
+      button {
+        margin-top: 20px;
+      }
     </style>
-</head>
-<body>
-    <h1>Kalorienverbrauch Berechnen (PAL-Methode)</h1>
-    
-    <label for="height">Körpergröße (cm):</label>
-    <input type="number" id="height" placeholder="z.B. 180" required>
+  </head>
+  <body>
+    <h1>Kalorienbedarf Rechner (PAL-Methode)</h1>
 
-    <label for="weight">Gewicht (kg):</label>
-    <input type="number" id="weight" placeholder="z.B. 84" required>
+    <form id="kalorienForm">
+      <label for="gewicht">Gewicht (kg):</label>
+      <input type="number" id="gewicht" required />
 
-    <label for="age">Alter (Jahre):</label>
-    <input type="number" id="age" placeholder="z.B. 36" required>
+      <label for="groesse">Größe (cm):</label>
+      <input type="number" id="groesse" required />
 
-    <label for="gender">Geschlecht:</label>
-    <select id="gender" required>
-        <option value="male">Männlich</option>
-        <option value="female">Weiblich</option>
-    </select>
+      <label for="alter">Alter (Jahre):</label>
+      <input type="number" id="alter" required />
 
-    <label for="weeklyHours">Wöchentliche Arbeitsstunden:</label>
-    <input type="number" id="weeklyHours" placeholder="z.B. 40" required>
+      <label for="geschlecht">Geschlecht:</label>
+      <select id="geschlecht">
+        <option value="männlich">Männlich</option>
+        <option value="weiblich">Weiblich</option>
+      </select>
 
-    <label for="job">Beruf:</label>
-    <select id="job" required>
-        <option value="1.2">Büroarbeit (PAL 1.2)</option>
-        <option value="1.4">Verkäufer (PAL 1.4)</option>
-        <option value="1.5">Lehrer (PAL 1.5)</option>
-        <option value="1.6">Handwerker (PAL 1.6)</option>
-        <option value="1.7">Kellner (PAL 1.7)</option>
-        <option value="1.8">Bauarbeiter (PAL 1.8)</option>
-        <option value="1.9">Landwirt (PAL 1.9)</option>
-        <option value="2.0">Sportler (PAL 2.0)</option>
-    </select>
+      <label for="stundenArbeit">Stunden Arbeit pro Woche:</label>
+      <input type="number" id="stundenArbeit" required />
 
-    <label for="customPal">Optional: Eigener PAL-Wert für die Arbeit:</label>
-    <input type="number" id="customPal" placeholder="z.B. 1.6" step="0.1">
+      <label for="beruf">Beruf:</label>
+      <select id="beruf">
+        <option value="1.2">Home-Office (1.2 PAL)</option>
+        <option value="1.3">Büroangestellter (1.3 PAL)</option>
+        <option value="1.4">Lehrer (1.4 PAL)</option>
+        <option value="1.5">Verkäufer (1.5 PAL)</option>
+        <option value="1.6">Kellner (1.6 PAL)</option>
+        <option value="1.7">Pflegekraft (1.7 PAL)</option>
+        <option value="1.8">Bauarbeiter (1.8 PAL)</option>
+        <option value="1.9">Landwirt (1.9 PAL)</option>
+        <option value="2.0">Sportlehrer (2.0 PAL)</option>
+        <option value="2.2">Baustelle (2.2 PAL)</option>
+        <option value="2.4">Bergführer (2.4 PAL)</option>
+      </select>
 
-    <button onclick="calculateCalories()">Berechnen</button>
+      <label for="palManuell">Manueller PAL-Wert:</label>
+      <input type="number" id="palManuell" step="0.1" />
 
-    <h2 id="result">Kalorienverbrauch: </h2>
+      <button type="button" onclick="berechneKalorien()">Kalorienbedarf berechnen</button>
+    </form>
+
+    <h2>Kalorienverbrauch pro Woche:</h2>
+    <p id="kalorienErgebnis">Bitte fülle das Formular aus und klicke auf "Berechnen".</p>
 
     <script>
-        function calculateCalories() {
-            const height = parseFloat(document.getElementById('height').value);
-            const weight = parseFloat(document.getElementById('weight').value);
-            const age = parseInt(document.getElementById('age').value);
-            const gender = document.getElementById('gender').value;
-            const weeklyHours = parseFloat(document.getElementById('weeklyHours').value);
-            const jobPal = parseFloat(document.getElementById('job').value);
-            const customPal = parseFloat(document.getElementById('customPal').value) || jobPal;
+      function berechneKalorien() {
+        // Körperdaten und Eingaben
+        const gewicht = parseFloat(document.getElementById("gewicht").value);
+        const groesse = parseFloat(document.getElementById("groesse").value);
+        const alter = parseInt(document.getElementById("alter").value);
+        const geschlecht = document.getElementById("geschlecht").value;
+        const stundenArbeit = parseFloat(document.getElementById("stundenArbeit").value);
+        const berufPal = parseFloat(document.getElementById("beruf").value);
+        const palManuell = parseFloat(document.getElementById("palManuell").value);
 
-            const pal = customPal;
-            const bmr = gender === "male"
-                ? 88.362 + (13.397 * weight) + (4.799 * height) - (5.677 * age)
-                : 447.593 + (9.247 * weight) + (3.098 * height) - (4.330 * age);
-
-            const dailyCalories = bmr * pal;
-            const weeklyCalories = dailyCalories * (weeklyHours / 7);
-
-            document.getElementById('result').innerText = `Kalorienverbrauch: ${weeklyCalories.toFixed(2)} kcal pro Woche`;
+        // Grundumsatz (BMR) nach Mifflin-St. Jeor-Formel
+        let grundumsatz;
+        if (geschlecht === "männlich") {
+          grundumsatz = 10 * gewicht + 6.25 * groesse - 5 * alter + 5;
+        } else {
+          grundumsatz = 10 * gewicht + 6.25 * groesse - 5 * alter - 161;
         }
+
+        // PAL-Wert bestimmen
+        const palWert = palManuell || berufPal;
+
+        // Arbeitszeit pro Woche und tägliche Arbeitszeit ermitteln
+        const tageProWoche = 7;
+        const kalorienbedarfProTag = grundumsatz * palWert;
+        const kalorienProWoche = kalorienbedarfProTag * tageProWoche;
+
+        // Ergebnis anzeigen
+        document.getElementById("kalorienErgebnis").innerText = `Dein wöchentlicher Kalorienbedarf beträgt: ${kalorienProWoche.toFixed(2)} kcal, pro Tag ${kalorienbedarfProTag.toFixed(2)} kcal.`;
+      }
     </script>
-</body>
+  </body>
 </html>
