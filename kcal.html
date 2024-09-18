@@ -76,11 +76,13 @@
                 BMR = 447.593 + (9.247 * weight) + (3.098 * height) - (4.330 * age);
             }
 
-            // Calorie burn from steps
-            let caloriesFromSteps = avgSteps * 0.04;
+            // Calorie burn from steps, adjusted for non-working hours
+            const nonWorkHours = 24 - (workHours / 7); // hours per day excluding work
+            let caloriesFromSteps = (avgSteps / nonWorkHours) * 0.04 * nonWorkHours;
 
-            // Calculate work calories per week, then divide by 7 for daily calories
-            let caloriesFromWork = (metValue * weight * workHours) / 7;
+            // Calculate work calories, minus the BMR portion for those hours
+            const bmrPerHour = BMR / 24;
+            let caloriesFromWork = (metValue * weight * workHours / 7) - (bmrPerHour * workHours / 7);
 
             // Total calorie requirement
             let totalCalories = BMR + caloriesFromSteps + caloriesFromWork;
@@ -90,7 +92,7 @@
 
             // Breakdown of components
             document.getElementById('breakdown').textContent = 
-                `Grundumsatz: ${BMR.toFixed(2)} kcal, Kalorien durch Arbeit: ${caloriesFromWork.toFixed(2)} kcal, Kalorien durch Schritte: ${caloriesFromSteps.toFixed(2)} kcal`;
+                `Grundumsatz: ${BMR.toFixed(2)} kcal, Kalorien durch Arbeit (angepasst): ${caloriesFromWork.toFixed(2)} kcal, Kalorien durch Schritte (außerhalb der Arbeit): ${caloriesFromSteps.toFixed(2)} kcal`;
         }
     </script>
 </body>
