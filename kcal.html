@@ -30,11 +30,19 @@
         <label for="jobType">Beruf:</label>
         <select id="jobType" name="jobType" required>
             <option value="1.3">Home Office (1.3 MET)</option>
-            <option value="2.3">Verkäufer (2.3 MET)</option>
-            <option value="1.8">Friseur (1.8 MET)</option>
-            <option value="3.0">Produktion (3.0 MET)</option>
-            <option value="4.0">Mechaniker (4.0 MET)</option>
+            <option value="1.5">Büroarbeit (1.5 MET)</option>
+            <option value="1.8">Lehrer (1.8 MET)</option>
+            <option value="2.3">Verkäufer/Friseur (2.3 MET)</option>
+            <option value="2.5">Krankenpfleger (2.5 MET)</option>
+            <option value="3.0">Produktionsmitarbeiter (3.0 MET)</option>
+            <option value="3.5">Mechaniker (3.5 MET)</option>
+            <option value="4.0">Bauarbeiter (4.0 MET)</option>
+            <option value="4.5">Lagerarbeiter (4.5 MET)</option>
+            <option value="5.0">Landwirt (5.0 MET)</option>
         </select><br><br>
+
+        <label for="customMet">Manueller MET-Wert (optional):</label>
+        <input type="number" step="0.1" id="customMet" name="customMet"><br><br>
 
         <label for="steps">Durchschnittliche Schritte pro Tag:</label>
         <input type="number" id="steps" name="steps" required><br><br>
@@ -54,6 +62,10 @@
             const workHours = parseFloat(document.getElementById('workHours').value);
             const jobType = parseFloat(document.getElementById('jobType').value); // MET value
             const avgSteps = parseFloat(document.getElementById('steps').value);
+            const customMet = parseFloat(document.getElementById('customMet').value);
+
+            // Use custom MET if provided
+            const metValue = customMet || jobType;
 
             // BMR calculation
             let BMR;
@@ -67,7 +79,7 @@
             let caloriesFromSteps = avgSteps * 0.04;
 
             // Calculate work calories per week, then divide by 7 for daily calories
-            let caloriesFromWork = (jobType * weight * workHours) / 7;
+            let caloriesFromWork = (metValue * weight * workHours) / 7;
 
             // Total calorie requirement
             let totalCalories = BMR + caloriesFromSteps + caloriesFromWork;
