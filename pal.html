@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PAL und Kalorienrechner</title>
+</head>
+<body>
+    <h1>PAL und Kalorienrechner</h1>
+    
+    <div id="activities">
+        <div class="activity">
+            <label for="activity1">Aktivität 1:</label>
+            <select id="activity1" class="activity-select">
+                <option value="0.95">Schlafen</option>
+                <option value="1.2">Sitzen / Homeoffice</option>
+                <option value="1.5">Leichte Büroarbeit</option>
+                <option value="1.8">Leichte Aktivität (z.B. Hausarbeit)</option>
+                <option value="2.5">Gehen</option>
+                <option value="3.0">Schwere körperliche Arbeit (z.B. Bauarbeiter)</option>
+            </select>
+            <label for="hours1">Stunden:</label>
+            <input type="number" id="hours1" value="8" min="0" max="24">
+        </div>
+
+        <!-- Weitere Aktivitäten hinzufügen -->
+        <div class="activity">
+            <label for="activity2">Aktivität 2:</label>
+            <select id="activity2" class="activity-select">
+                <option value="0.95">Schlafen</option>
+                <option value="1.2">Sitzen / Homeoffice</option>
+                <option value="1.5">Leichte Büroarbeit</option>
+                <option value="1.8">Leichte Aktivität (z.B. Hausarbeit)</option>
+                <option value="2.5">Gehen</option>
+                <option value="3.0">Schwere körperliche Arbeit (z.B. Bauarbeiter)</option>
+            </select>
+            <label for="hours2">Stunden:</label>
+            <input type="number" id="hours2" value="8" min="0" max="24">
+        </div>
+
+        <!-- Du kannst weitere Aktivitäten und Stundenfelder hinzufügen, wie du möchtest. -->
+    </div>
+    
+    <button onclick="calculatePAL()">Berechne PAL und Kalorienbedarf</button>
+
+    <h2 id="result-pal">PAL Wert: </h2>
+    <h2 id="result-calories">Kalorienbedarf: </h2>
+
+    <script>
+        // Konstanten für den Grundumsatz
+        const baseMetabolicRate = 1800; // Beispiel-Grundumsatz in kcal (individuell anpassbar)
+
+        // Funktion zur Berechnung des PAL und Kalorienbedarfs
+        function calculatePAL() {
+            // Variablen für die Summen von PAL * Stunden und die gesamten Stunden
+            let totalPalHours = 0;
+            let totalHours = 0;
+
+            // Alle Aktivitäts-Selects und Stunden-Inputs sammeln
+            const activities = document.querySelectorAll('.activity-select');
+            const hours = document.querySelectorAll('input[type="number"]');
+
+            // Schleife durch alle Aktivitäten
+            for (let i = 0; i < activities.length; i++) {
+                const palValue = parseFloat(activities[i].value);
+                const hoursValue = parseFloat(hours[i].value);
+
+                totalPalHours += palValue * hoursValue;
+                totalHours += hoursValue;
+            }
+
+            // Berechnung des täglichen PAL (Gewichteter Durchschnitt)
+            const dailyPal = totalPalHours / totalHours;
+
+            // Berechnung des Kalorienbedarfs
+            const calorieNeeds = baseMetabolicRate * dailyPal;
+
+            // Ergebnisse anzeigen
+            document.getElementById('result-pal').innerText = `PAL Wert: ${dailyPal.toFixed(2)}`;
+            document.getElementById('result-calories').innerText = `Kalorienbedarf: ${calorieNeeds.toFixed(2)} kcal`;
+        }
+    </script>
+</body>
+</html>
