@@ -51,6 +51,7 @@
     </form>
 
     <p id="result"></p>
+    <p id="breakdown"></p>
 
     <script>
         function calculateCalories() {
@@ -86,6 +87,10 @@
 
             // Output result
             document.getElementById('result').textContent = `Dein täglicher Kalorienbedarf beträgt: ${totalCalories.toFixed(2)} kcal`;
+
+            // Breakdown of components
+            document.getElementById('breakdown').textContent = 
+                `Grundumsatz: ${BMR.toFixed(2)} kcal, Kalorien durch Arbeit: ${caloriesFromWork.toFixed(2)} kcal, Kalorien durch Schritte: ${caloriesFromSteps.toFixed(2)} kcal`;
         }
     </script>
 </body>
