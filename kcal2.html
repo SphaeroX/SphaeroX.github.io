@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kalorienberechnung</title>
+</head>
+<body>
+    <h2>Kalorienverbrauch Berechnung</h2>
+    
+    <form id="calorieForm">
+        <label for="weight">Gewicht (kg):</label>
+        <input type="number" id="weight" name="weight" required><br><br>
+
+        <label for="height">Größe (cm):</label>
+        <input type="number" id="height" name="height" required><br><br>
+
+        <label for="age">Alter:</label>
+        <input type="number" id="age" name="age" required><br><br>
+
+        <label for="gender">Geschlecht:</label>
+        <select id="gender" name="gender" required>
+            <option value="male">Männlich</option>
+            <option value="female">Weiblich</option>
+        </select><br><br>
+
+        <label for="workHours">Arbeitsstunden pro Woche:</label>
+        <input type="number" id="workHours" name="workHours" required><br><br>
+
+        <label for="jobType">Beruf:</label>
+        <select id="jobType" name="jobType" required>
+            <option value="1.3">Home Office (1.3 MET)</option>
+            <option value="1.5">Büroarbeit (1.5 MET)</option>
+            <option value="1.8">Lehrer (1.8 MET)</option>
+            <option value="2.3">Verkäufer/Friseur (2.3 MET)</option>
+            <option value="2.5">Krankenpfleger (2.5 MET)</option>
+            <option value="3.0">Produktionsmitarbeiter (3.0 MET)</option>
+            <option value="3.5">Mechaniker (3.5 MET)</option>
+            <option value="4.0">Bauarbeiter (4.0 MET)</option>
+            <option value="4.5">Lagerarbeiter (4.5 MET)</option>
+            <option value="5.0">Landwirt (5.0 MET)</option>
+        </select><br><br>
+
+        <label for="customMet">Manueller MET-Wert (optional):</label>
+        <input type="number" step="0.1" id="customMet" name="customMet"><br><br>
+
+        <label for="steps">Durchschnittliche Schritte pro Tag:</label>
+        <input type="number" id="steps" name="steps" required><br><br>
+
+        <button type="button" onclick="calculateCalories()">Berechnen</button>
+    </form>
+
+    <p id="result"></p>
+    <p id="breakdown"></p>
+
+    <script>
+        function calculateCalories() {
+            // Get form values
+            const weight = parseFloat(document.getElementById('weight').value);
+            const height = parseFloat(document.getElementById('height').value);
+            const age = parseFloat(document.getElementById('age').value);
+            const gender = document.getElementById('gender').value;
+            const workHours = parseFloat(document.getElementById('workHours').value);
+            const jobType = parseFloat(document.getElementById('jobType').value); // MET value
+            const avgSteps = parseFloat(document.getElementById('steps').value);
+            const customMet = parseFloat(document.getElementById('customMet').value);
+
+            // Use custom MET if provided
+            const metValue = customMet || jobType;
+
+            // BMR calculation
+            let BMR;
+            if (gender === 'male') {
+                BMR = 88.362 + (13.397 * weight) + (4.799 * height) - (5.677 * age);
+            } else {
+                BMR = 447.593 + (9.247 * weight) + (3.098 * height) - (4.330 * age);
+            }
+
+            // Calorie burn from steps, adjusted for non-working hours
+            const nonWorkHours = 24 - (workHours / 7); // hours per day excluding work
+            let caloriesFromSteps = (avgSteps / nonWorkHours) * 0.04 * nonWorkHours;
+
+            // Calculate work calories, minus the BMR portion for those hours
+            const bmrPerHour = BMR / 24;
+            let caloriesFromWork = (metValue * weight * workHours / 7) - (bmrPerHour * workHours / 7);
+
+            // Total calorie requirement
+            let totalCalories = BMR + caloriesFromSteps + caloriesFromWork;
+
+            // Output result
+            document.getElementById('result').textContent = `Dein täglicher Kalorienbedarf beträgt: ${totalCalories.toFixed(2)} kcal`;
+
+            // Breakdown of components
+            document.getElementById('breakdown').textContent = 
+                `Grundumsatz: ${BMR.toFixed(2)} kcal, Kalorien durch Arbeit (angepasst): ${caloriesFromWork.toFixed(2)} kcal, Kalorien durch Schritte (außerhalb der Arbeit): ${caloriesFromSteps.toFixed(2)} kcal`;
+        }
+    </script>
+</body>
+</html>
