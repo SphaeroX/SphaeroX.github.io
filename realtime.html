@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Echtzeit Audio Konversation</title>
+</head>
+<body>
+    <h1>Echtzeit Audio Konversation</h1>
+    
+    <label for="apiKeyInput">API-Schlüssel eingeben:</label>
+    <input type="text" id="apiKeyInput" placeholder="API-Schlüssel hier eingeben">
+    <br><br>
+
+    <label for="audioInput">Drücke den Button und sprich in Echtzeit:</label>
+    <button id="audioButton">Aufnehmen und Sprechen</button>
+    <p id="status">Bereit zum Sprechen...</p>
+
+    <h2>Antwort:</h2>
+    <div id="responseContainer"></div>
+
+    <script>
+        let audioButton = document.getElementById("audioButton");
+        let status = document.getElementById("status");
+        let responseContainer = document.getElementById("responseContainer");
+        let apiKeyInput = document.getElementById("apiKeyInput");
+        let isRecording = false;
+        let ws;
+        let mediaRecorder;
+
+        audioButton.addEventListener("click", function() {
+            if (!isRecording) {
+                startRecording();
+            } else {
+                stopRecording();
+            }
+        });
+
+        function startRecording() {
+            const apiKey = apiKeyInput.value.trim();
+            if (!apiKey) {
+                alert("Bitte gib deinen API-Schlüssel ein.");
+                return;
+            }
+
+            status.textContent = "Aufnahme läuft... Sprich jetzt!";
+            isRecording = true;
+
+            // WebSocket Verbindung aufbauen
+            const wsUrl = "wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-10-01";
+            ws = new WebSocket(wsUrl, {
+                headers: {
+                    "Authorization": "Bearer " + apiKey,
+                    "OpenAI-Beta": "realtime=v1",
+                }
+            });
+
+            ws.onopen = () => {
+                console.log("Mit dem Server verbunden.");
+            };
+
+            ws.onmessage = (message) => {
+                const data = JSON.parse(message.data);
+                console.log(data);
+                responseContainer.innerHTML = "<p>" + data.response + "</p>";
+            };
+
+            ws.onerror = (error) => {
+                console.error("WebSocket Fehler: ", error);
+            };
+
+            ws.onclose = () => {
+                console.log("WebSocket Verbindung geschlossen.");
+            };
+
+            // Audioaufnahme starten
+            navigator.mediaDevices.getUserMedia({ audio: true })
+                .then(stream => {
+                    mediaRecorder = new MediaRecorder(stream);
+
+                    mediaRecorder.ondataavailable = function(event) {
+                        if (event.data.size > 0 && ws.readyState === WebSocket.OPEN) {
+                            // Audio-Chunks in Echtzeit senden
+                            ws.send(event.data);
+                        }
+                    };
+
+                    mediaRecorder.start(100); // Nimmt alle 100ms neue Chunks auf
+                })
+                .catch(error => {
+                    console.error("Fehler bei der Audioaufnahme: ", error);
+                    status.textContent = "Fehler bei der Audioaufnahme.";
+                });
+        }
+
+        function stopRecording() {
+            status.textContent = "Aufnahme gestoppt.";
+            isRecording = false;
+
+            if (mediaRecorder && mediaRecorder.state !== "inactive") {
+                mediaRecorder.stop();
+            }
+
+            if (ws) {
+                ws.close();
+            }
+        }
+    </script>
+</body>
+</html>
