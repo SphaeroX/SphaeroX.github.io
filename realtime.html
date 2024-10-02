@@ -4,6 +4,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Echtzeit Audio Konversation</title>
+    <style>
+        #logContainer {
+            margin-top: 20px;
+            border: 1px solid #ccc;
+            padding: 10px;
+            height: 200px;
+            overflow-y: scroll;
+            background-color: #f9f9f9;
+        }
+        .log-entry {
+            font-family: monospace;
+            margin-bottom: 5px;
+        }
+    </style>
 </head>
 <body>
     <h1>Echtzeit Audio Konversation</h1>
@@ -19,14 +33,26 @@
     <h2>Antwort (Audio):</h2>
     <audio id="audioResponse" controls></audio>
 
+    <h2>Logs:</h2>
+    <div id="logContainer"></div>
+
     <script>
         let audioButton = document.getElementById("audioButton");
         let status = document.getElementById("status");
         let apiKeyInput = document.getElementById("apiKeyInput");
         let audioResponse = document.getElementById("audioResponse");
+        let logContainer = document.getElementById("logContainer");
         let isRecording = false;
         let ws;
         let mediaRecorder;
+
+        function addLogEntry(message) {
+            let logEntry = document.createElement("div");
+            logEntry.className = "log-entry";
+            logEntry.textContent = message;
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight; // Scroll automatisch nach unten
+        }
 
         audioButton.addEventListener("click", function() {
             if (!isRecording) {
@@ -43,11 +69,14 @@
                 return;
             }
 
+            addLogEntry("API-Schlüssel eingetragen: " + apiKey);
             status.textContent = "Aufnahme läuft... Sprich jetzt!";
             isRecording = true;
 
             // WebSocket Verbindung aufbauen
             const wsUrl = "wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-10-01";
+            addLogEntry("WebSocket-Verbindung wird aufgebaut zu: " + wsUrl);
+
             ws = new WebSocket(wsUrl, {
                 headers: {
                     "Authorization": "Bearer " + apiKey,
@@ -56,42 +85,51 @@
             });
 
             ws.onopen = () => {
-                console.log("Mit dem Server verbunden.");
+                addLogEntry("WebSocket-Verbindung erfolgreich geöffnet.");
             };
 
             ws.onmessage = (message) => {
+                addLogEntry("Nachricht vom Server empfangen: " + message);
                 const data = message.data;
-                // Da die Antwort in Form von Audio kommt, wird der Blob direkt als Audio-Quelle verwendet
-                const audioBlob = new Blob([data], { type: 'audio/wav' });
-                const audioUrl = window.URL.createObjectURL(audioBlob);
-                audioResponse.src = audioUrl;
-                audioResponse.play();
+                addLogEntry("Rohdaten empfangen: " + data);
+
+                try {
+                    const audioBlob = new Blob([data], { type: 'audio/wav' });
+                    const audioUrl = window.URL.createObjectURL(audioBlob);
+                    audioResponse.src = audioUrl;
+                    audioResponse.play();
+                    addLogEntry("Audio-Antwort wird abgespielt.");
+                } catch (err) {
+                    addLogEntry("Fehler beim Abspielen der Audio-Antwort: " + err);
+                }
             };
 
             ws.onerror = (error) => {
-                console.error("WebSocket Fehler: ", error);
+                addLogEntry("WebSocket-Fehler: " + error);
             };
 
             ws.onclose = () => {
-                console.log("WebSocket Verbindung geschlossen.");
+                addLogEntry("WebSocket-Verbindung geschlossen.");
             };
 
             // Audioaufnahme starten
             navigator.mediaDevices.getUserMedia({ audio: true })
                 .then(stream => {
+                    addLogEntry("Mikrofon-Stream erfolgreich erhalten.");
                     mediaRecorder = new MediaRecorder(stream);
 
                     mediaRecorder.ondataavailable = function(event) {
                         if (event.data.size > 0 && ws.readyState === WebSocket.OPEN) {
-                            // Audio-Chunks in Echtzeit senden
+                            addLogEntry("Audio-Chunks werden gesendet: " + event.data);
                             ws.send(event.data);
                         }
                     };
 
                     mediaRecorder.start(100); // Nimmt alle 100ms neue Chunks auf
+                    addLogEntry("Audioaufnahme gestartet.");
                 })
                 .catch(error => {
-                    console.error("Fehler bei der Audioaufnahme: ", error);
+                    addLogEntry("Fehler beim Abrufen des Mikrofon-Streams: " + error);
                     status.textContent = "Fehler bei der Audioaufnahme.";
                 });
         }
@@ -102,10 +140,12 @@
 
             if (mediaRecorder && mediaRecorder.state !== "inactive") {
                 mediaRecorder.stop();
+                addLogEntry("Audioaufnahme gestoppt.");
             }
 
             if (ws) {
                 ws.close();
+                addLogEntry("WebSocket-Verbindung geschlossen.");
             }
         }
     </script>
