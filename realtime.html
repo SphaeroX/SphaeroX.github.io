@@ -16,14 +16,14 @@
     <button id="audioButton">Aufnehmen und Sprechen</button>
     <p id="status">Bereit zum Sprechen...</p>
 
-    <h2>Antwort:</h2>
-    <div id="responseContainer"></div>
+    <h2>Antwort (Audio):</h2>
+    <audio id="audioResponse" controls></audio>
 
     <script>
         let audioButton = document.getElementById("audioButton");
         let status = document.getElementById("status");
-        let responseContainer = document.getElementById("responseContainer");
         let apiKeyInput = document.getElementById("apiKeyInput");
+        let audioResponse = document.getElementById("audioResponse");
         let isRecording = false;
         let ws;
         let mediaRecorder;
@@ -60,9 +60,12 @@
             };
 
             ws.onmessage = (message) => {
-                const data = JSON.parse(message.data);
-                console.log(data);
-                responseContainer.innerHTML = "<p>" + data.response + "</p>";
+                const data = message.data;
+                // Da die Antwort in Form von Audio kommt, wird der Blob direkt als Audio-Quelle verwendet
+                const audioBlob = new Blob([data], { type: 'audio/wav' });
+                const audioUrl = window.URL.createObjectURL(audioBlob);
+                audioResponse.src = audioUrl;
+                audioResponse.play();
             };
 
             ws.onerror = (error) => {
