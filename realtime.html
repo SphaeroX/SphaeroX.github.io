@@ -30,9 +30,6 @@
     <button id="audioButton">Aufnehmen und Sprechen</button>
     <p id="status">Bereit zum Sprechen...</p>
 
-    <h2>Antwort (Audio):</h2>
-    <audio id="audioResponse" controls></audio>
-
     <h2>Logs:</h2>
     <div id="logContainer"></div>
 
@@ -40,7 +37,6 @@
         let audioButton = document.getElementById("audioButton");
         let status = document.getElementById("status");
         let apiKeyInput = document.getElementById("apiKeyInput");
-        let audioResponse = document.getElementById("audioResponse");
         let logContainer = document.getElementById("logContainer");
         let isRecording = false;
         let ws;
@@ -96,8 +92,10 @@
                 try {
                     const audioBlob = new Blob([data], { type: 'audio/wav' });
                     const audioUrl = window.URL.createObjectURL(audioBlob);
-                    audioResponse.src = audioUrl;
-                    audioResponse.play();
+                    
+                    // Audio ohne sichtbaren Player abspielen
+                    const audio = new Audio(audioUrl);
+                    audio.play();
                     addLogEntry("Audio-Antwort wird abgespielt.");
                 } catch (err) {
                     addLogEntry("Fehler beim Abspielen der Audio-Antwort: " + err);
