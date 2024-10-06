@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>ISS Tracker</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding-top: 50px;
+            background-color: #0d1b2a;
+            color: #e0e1dd;
+        }
+        #compass {
+            position: relative;
+            width: 300px;
+            height: 300px;
+            margin: 0 auto;
+            background: url('https://i.imgur.com/8QFhXkX.png') no-repeat center center;
+            background-size: contain;
+        }
+        #arrow {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 4px;
+            height: 140px;
+            background-color: red;
+            transform-origin: bottom center;
+            transform: rotate(0deg) translate(-50%, -100%);
+        }
+        #info {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>ISS Tracker</h1>
+    <div id="compass">
+        <div id="arrow"></div>
+    </div>
+    <div id="info">
+        <p>Azimut: <span id="azimuth">-</span>°</p>
+        <p>Elevation: <span id="elevation">-</span>°</p>
+        <p id="status">Lade Daten...</p>
+    </div>
+
+    <script>
+        const azimuthElem = document.getElementById('azimuth');
+        const elevationElem = document.getElementById('elevation');
+        const statusElem = document.getElementById('status');
+        const arrow = document.getElementById('arrow');
+
+        const EARTH_RADIUS = 6371; // in km
+
+        // Funktion zur Umwandlung von Grad in Radiant
+        function toRadians(degrees) {
+            return degrees * Math.PI / 180;
+        }
+
+        // Funktion zur Umwandlung von Radiant in Grad
+        function toDegrees(radians) {
+            return radians * 180 / Math.PI;
+        }
+
+        // Funktion zur Umwandlung von geodätischen Koordinaten zu ECEF
+        function geodeticToECEF(lat, lon, alt) {
+            const phi = toRadians(lat);
+            const lambda = toRadians(lon);
+            const r = EARTH_RADIUS + alt / 1000; // alt in meters umwandeln zu km
+
+            const x = r * Math.cos(phi) * Math.cos(lambda);
+            const y = r * Math.cos(phi) * Math.sin(lambda);
+            const z = r * Math.sin(phi);
+
+            return {x, y, z};
+        }
+
+        // Funktion zur Berechnung von Azimut und Elevation
+        function calculateAzEl(userPos, issPos) {
+            // Unterschiedsvektor
+            const dx = issPos.x - userPos.x;
+            const dy = issPos.y - userPos.y;
+            const dz = issPos.z - userPos.z;
+
+            // Umrechnung in ENU
+            const phi = toRadians(userPos.lat);
+            const lambda = toRadians(userPos.lon);
+
+            const sinPhi = Math.sin(phi);
+            const cosPhi = Math.cos(phi);
+            const sinLambda = Math.sin(lambda);
+            const cosLambda = Math.cos(lambda);
+
+            const E = -sinLambda * dx + cosLambda * dy;
+            const N = -sinPhi * cosLambda * dx - sinPhi * sinLambda * dy + cosPhi * dz;
+            const U = cosPhi * cosLambda * dx + cosPhi * sinLambda * dy + sinPhi * dz;
+
+            // Azimut berechnen
+            let azimuth = Math.atan2(E, N);
+            if (azimuth < 0) {
+                azimuth += 2 * Math.PI;
+            }
+            azimuth = toDegrees(azimuth);
+
+            // Elevation berechnen
+            const horizontalDist = Math.sqrt(E * E + N * N);
+            const elevation = toDegrees(Math.atan2(U, horizontalDist));
+
+            return {azimuth, elevation};
+        }
+
+        // Funktion zum Abrufen der ISS-Position
+        async function getISSPosition() {
+            try {
+                const response = await fetch('https://api.wheretheiss.at/v1/satellites/25544');
+                if (!response.ok) {
+                    throw new Error('Fehler beim Abrufen der ISS-Daten.');
+                }
+                const data = await response.json();
+                return {
+                    lat: data.latitude,
+                    lon: data.longitude,
+                    alt: data.altitude // in km
+                };
+            } catch (error) {
+                console.error(error);
+                statusElem.textContent = 'Fehler beim Abrufen der ISS-Daten.';
+                return null;
+            }
+        }
+
+        // Funktion zum Aktualisieren der Position
+        async function updatePosition(userCoords) {
+            const issData = await getISSPosition();
+            if (!issData) return;
+
+            const userECEF = geodeticToECEF(userCoords.latitude, userCoords.longitude, 0); // Höhe = 0 km
+            userECEF.lat = userCoords.latitude;
+            userECEF.lon = userCoords.longitude;
+
+            const issECEF = geodeticToECEF(issData.lat, issData.lon, issData.alt * 1000); // alt in km
+
+            const {azimuth, elevation} = calculateAzEl(userECEF, issECEF);
+
+            azimuthElem.textContent = azimuth.toFixed(2);
+            elevationElem.textContent = elevation.toFixed(2);
+            statusElem.textContent = 'Daten aktualisiert';
+
+            // Rotieren des Pfeils
+            arrow.style.transform = `rotate(${azimuth}deg) translate(-50%, -100%)`;
+        }
+
+        // Funktion zum Initialisieren
+        function init() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(position => {
+                    const userCoords = position.coords;
+                    updatePosition(userCoords);
+
+                    // Regelmäßiges Aktualisieren alle 5 Sekunden
+                    setInterval(() => {
+                        updatePosition(userCoords);
+                    }, 5000);
+                }, error => {
+                    console.error(error);
+                    statusElem.textContent = 'Geolocation-Fehler: ' + error.message;
+                });
+            } else {
+                statusElem.textContent = 'Geolocation wird von diesem Browser nicht unterstützt.';
+            }
+        }
+
+        // Start
+        init();
+    </script>
+</body>
+</html>
