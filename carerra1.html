@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <title>Carrera Control via JavaScript</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 20px;
+    }
+    button {
+      margin: 5px;
+    }
+    #log {
+      width: 100%;
+      height: 200px;
+      border: 1px solid #ccc;
+      overflow-y: scroll;
+      padding: 5px;
+      font-family: monospace;
+      white-space: pre-wrap;
+    }
+    #driversTable {
+      margin-top: 20px;
+      border-collapse: collapse;
+      width: 100%;
+    }
+    #driversTable th, #driversTable td {
+      border: 1px solid #ccc;
+      padding: 5px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Carrera Control Unit - JavaScript Demo</h1>
+
+<p>
+  <button onclick="connectSerial()">Über Web Serial verbinden</button>
+  <button onclick="connectBLE()">Über Web Bluetooth verbinden</button>
+  <button onclick="disconnect()">Verbindung trennen</button>
+</p>
+
+<div>
+  <button onclick="startRace()">Start Race (Start/Enter Button)</button>
+  <button onclick="pressPaceCar()">Pace/ESC</button>
+  <button onclick="pressSpeed()">Speed</button>
+  <button onclick="pressBrake()">Brake</button>
+  <button onclick="pressFuel()">Fuel</button>
+  <button onclick="pressCode()">Code</button>
+</div>
+
+<div>
+  <button onclick="resetCU()">Reset Timer</button>
+  <button onclick="clearPosTower()">Clear Position Tower</button>
+</div>
+
+<div>
+  <button onclick="setLapManual()">Set Lap: (z.B. 12)</button>
+  <input type="number" id="lapValue" value="12" style="width:60px;"/>
+</div>
+
+<div>
+  <button onclick="setSpeed()">Set Speed (addr=0, value=5)</button>
+  <button onclick="setFuel()">Set Fuel (addr=0, value=10)</button>
+  <button onclick="setBrake()">Set Brake (addr=0, value=3)</button>
+</div>
+
+<div>
+  <button onclick="pollCU()">Poll CU</button>
+</div>
+
+<h3>Fahrer/Drivers:</h3>
+<table id="driversTable">
+  <thead>
+    <tr>
+      <th>Address (0..7)</th>
+      <th>Position</th>
+      <th>Laps</th>
+      <th>Fuel (0..15)</th>
+      <th>Pits (#)</th>
+    </tr>
+  </thead>
+  <tbody id="driversBody">
+    <!-- Dynamisch befüllt -->
+  </tbody>
+</table>
+
+<div id="log"></div>
+
+<script>
+// --------------------------------------------------------------
+// Hilfs-Funktionen für Logging in der Seite
+// --------------------------------------------------------------
+function log(msg) {
+  const logEl = document.getElementById('log');
+  logEl.textContent += msg + "\n";
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+// --------------------------------------------------------------
+// PROTOCOL (chksum, pack, unpack) -- vereinfacht, aber angelehnt an Python
+// --------------------------------------------------------------
+class CarreraProtocol {
+  static chksum(buf, offset=0, size=null) {
+    if (size == null) size = buf.length - offset;
+    let sum = 0;
+    for (let i = offset; i < offset + size; i++) {
+      sum += buf[i];
+    }
+    return sum & 0x0F;  // modulo 16
+  }
+
+  // Hilfsfunktionen: da wir in JS anders arbeiten, machen wir's etwas direkter
+  static packSingleByteB(value) {
+    // 'B' => 2 nibble-chars [0..15]
+    // z.B. value=0x3A => nibble1 = 0xA, nibble2 = 0x3 -> ASCII-code offset '0'
+    // Aus Kompatibilitätsgründen orientieren wir uns an Python-Logik.
+    const lo = (value & 0x0F);
+    const hi = ((value >> 4) & 0x0F);
+    return [48 + lo, 48 + hi]; // '0' = 48
+  }
+
+  static packChecksumC(buffer, startIndex) {
+    // C => 1 nibble => 4bit, in hex => wir machen es wie chksum
+    const chk = CarreraProtocol.chksum(buffer, startIndex, buffer.length - startIndex);
+    return [48 + (chk & 0x0F)];
+  }
+
+  // Minimale pack-Funktion, um z.B. "cBYYC" Strings zu bauen
+  static pack(formatStr, ...args) {
+    // Achtung: Dies ist nur ein Minimalauszug. In Python war das mit Regex
+    // und mehr Typen. Wir vereinfachen hier, decken aber gängige Fälle ab.
+    // Bekannte Format-Placeholder: c, B, Y, I, ...
+    // c => raw byte
+    // B => 2 nibble-chars
+    // Y => 1 nibble
+    // C => checksum
+    const result = [];
+    let argIndex = 0;
+
+    for (let i = 0; i < formatStr.length; i++) {
+      const f = formatStr[i];
+      if (f === 'c') {
+        // 'c' => bytes (wir nehmen an, es ist 1 Byte oder ein Byte-Array)
+        const data = args[argIndex++];
+        if (typeof data === 'number') {
+          // single byte
+          result.push(data);
+        } else if (data instanceof Uint8Array) {
+          data.forEach((val) => result.push(val));
+        } else if (data instanceof ArrayBuffer) {
+          new Uint8Array(data).forEach((val) => result.push(val));
+        } else if (typeof data === 'string') {
+          // wir wandeln String in Bytes (ASCII)
+          for (let c of data) {
+            result.push(c.charCodeAt(0));
+          }
+        }
+      } else if (f === 'B') {
+        const val = args[argIndex++];
+        result.push(...CarreraProtocol.packSingleByteB(val));
+      } else if (f === 'Y') {
+        // 1 nibble => 0xF
+        const val = args[argIndex++];
+        result.push(48 + (val & 0x0F)); // '0' + nibble
+      } else if (f === 'C') {
+        // compute chksum from last known start
+        // wir tun so, als ob wir die Checksum an Ende hängen
+        const offset = 0; // hier simplifying
+        const chksumBytes = CarreraProtocol.packChecksumC(result, offset);
+        result.push(...chksumBytes);
+      } else {
+        // wir ignorieren Leerzeichen etc.
+      }
+    }
+    return new Uint8Array(result);
+  }
+}
+
+// --------------------------------------------------------------
+// CONNECTION - WebSerial + WebBluetooth
+// --------------------------------------------------------------
+class CarreraConnection {
+  async open() { throw new Error("Not implemented"); }
+  async close() { throw new Error("Not implemented"); }
+  async send(buf) { throw new Error("Not implemented"); }
+  async recv(maxLen=null) { throw new Error("Not implemented"); }
+}
+
+class SerialConnection extends CarreraConnection {
+  constructor() {
+    super();
+    this.port = null;
+    this.reader = null;
+    this.writer = null;
+    this.keepReading = false;
+    this.readQueue = []; // Puffer an empfangenen "Nachrichten"
+    this.decoder = new TextDecoder(); // Hilfsweise, je nach Protokoll
+    this.encoder = new TextEncoder();
+  }
+
+  async open(options={ baudRate:19200 }) {
+    // Web Serial API
+    const port = await navigator.serial.requestPort({});
+    await port.open(options);
+    this.port = port;
+    this.keepReading = true;
+    this.startReader();
+  }
+
+  async close() {
+    this.keepReading = false;
+    if (this.reader) {
+      try { await this.reader.cancel(); } catch(e) { /* ignore */ }
+    }
+    if (this.port) {
+      await this.port.close();
+    }
+    this.port = null;
+    this.reader = null;
+    this.writer = null;
+    this.readQueue = [];
+  }
+
+  async startReader() {
+    if (!this.port) return;
+    this.reader = this.port.readable.getReader();
+    let buffer = [];
+    try {
+      while (this.keepReading) {
+        const { value, done } = await this.reader.read();
+        if (done) break;
+        if (value) {
+          // Wir sammeln Byte für Byte, bis wir das Protokollende erkennen
+          // In Python war das z.B. bis '$' oder '#' kam
+          for (let b of value) {
+            if (b === 36 /* '$' */ || b === 35 /* '#' */) {
+              // Wir schließen die Nachricht
+              buffer.push(b);
+              const msg = new Uint8Array(buffer);
+              this.readQueue.push(msg);
+              buffer = [];
+            } else {
+              buffer.push(b);
+            }
+          }
+        }
+      }
+    } catch (err) {
+      log("SerialReader Error: " + err);
+    } finally {
+      this.reader.releaseLock();
+    }
+  }
+
+  async send(buf) {
+    if (!this.port) throw new Error("Port not open");
+    if (!this.writer) {
+      this.writer = this.port.writable.getWriter();
+    }
+    // In Python: self.__serial.write(b'"')... wir hängen also Anführungszeichen an
+    const prefix = new Uint8Array([0x22]); // ASCII "
+    const suffix = new Uint8Array([0x24]); // ASCII $
+    let dataToSend = new Uint8Array(prefix.length + buf.length + suffix.length);
+    dataToSend.set(prefix, 0);
+    dataToSend.set(buf, prefix.length);
+    dataToSend.set(suffix, prefix.length + buf.length);
+
+    await this.writer.write(dataToSend);
+    // flush simulieren => in WebSerial gibts kein flush, wir können releaseLock() machen
+    this.writer.releaseLock();
+    this.writer = null;
+  }
+
+  async recv(maxLen=null) {
+    // Warte, bis in readQueue was anliegt
+    const startTime = Date.now();
+    while (true) {
+      if (this.readQueue.length > 0) {
+        const msg = this.readQueue.shift();
+        if (maxLen && msg.length > maxLen) {
+          throw new Error("BufferTooShort: Nachricht größer als maxLen");
+        }
+        return msg;
+      }
+      await new Promise(r => setTimeout(r, 50));
+      if ((Date.now() - startTime) > 5000) { // Timeout 5s, je nach Geschmack
+        throw new Error("Timeout waiting for serial data");
+      }
+    }
+  }
+}
+
+class BLEConnection extends CarreraConnection {
+  constructor() {
+    super();
+    this.device = null;
+    this.server = null;
+    this.service = null;
+    this.writeChar = null;
+    this.notifyChar = null;
+    this.readQueue = [];
+    // UUIDs anpassen an dein Device
+    this.SERVICE_UUID = "39df7777-b1b4-b90b-57f1-7144ae4e4a6a";
+    this.OUTPUT_UUID  = "39df8888-b1b4-b90b-57f1-7144ae4e4a6a";
+    this.NOTIFY_UUID  = "39df9999-b1b4-b90b-57f1-7144ae4e4a6a";
+  }
+
+  async open() {
+    this.device = await navigator.bluetooth.requestDevice({
+      filters: [{ services: [this.SERVICE_UUID] }]
+    });
+    this.device.addEventListener('gattserverdisconnected', this.onDisconnect.bind(this));
+    this.server = await this.device.gatt.connect();
+    this.service = await this.server.getPrimaryService(this.SERVICE_UUID);
+    this.writeChar = await this.service.getCharacteristic(this.OUTPUT_UUID);
+    this.notifyChar = await this.service.getCharacteristic(this.NOTIFY_UUID);
+
+    // Notification
+    await this.notifyChar.startNotifications();
+    this.notifyChar.addEventListener('characteristicvaluechanged', (event) => {
+      const val = event.target.value;
+      // Im Python-Code wird '$' ans Ende gesetzt, wir machen es ähnlich
+      // Hier: wir interpretieren mal Byte-für-Byte
+      const arr = new Uint8Array(val.buffer);
+      // Wir suchen wieder nach dem Delimiter
+      // Für Einfachheit schieben wir es direkt in readQueue (kompletter Block)
+      this.readQueue.push(arr);
+    });
+  }
+
+  onDisconnect(event) {
+    log("Bluetooth device disconnected");
+    // ggf. cleanup
+  }
+
+  async close() {
+    if (this.device && this.device.gatt.connected) {
+      await this.device.gatt.disconnect();
+    }
+    this.device = null;
+    this.server = null;
+    this.service = null;
+    this.writeChar = null;
+    this.notifyChar = null;
+    this.readQueue = [];
+  }
+
+  async send(buf) {
+    if (!this.writeChar) throw new Error("BLE not connected");
+    // analog zum Python code => wir fügen " " und "$" hinzu
+    const prefix = new Uint8Array([0x22]);
+    const suffix = new Uint8Array([0x24]);
+    let dataToSend = new Uint8Array(prefix.length + buf.length + suffix.length);
+    dataToSend.set(prefix, 0);
+    dataToSend.set(buf, prefix.length);
+    dataToSend.set(suffix, prefix.length + buf.length);
+    await this.writeChar.writeValueWithoutResponse(dataToSend);
+  }
+
+  async recv(maxLen=null) {
+    const startTime = Date.now();
+    while (true) {
+      if (this.readQueue.length > 0) {
+        const msg = this.readQueue.shift();
+        if (maxLen && msg.length > maxLen) {
+          throw new Error("BufferTooShort: Nachricht größer als maxLen");
+        }
+        return msg;
+      }
+      await new Promise(r => setTimeout(r, 50));
+      if ((Date.now() - startTime) > 5000) {
+        throw new Error("Timeout waiting for BLE data");
+      }
+    }
+  }
+}
+
+// --------------------------------------------------------------
+// CONTROL UNIT - analog zu cu.py
+// --------------------------------------------------------------
+class ControlUnit {
+  constructor(connection) {
+    this.connection = connection;
+    this.drivers = [];
+    for (let i = 0; i < 8; i++) {
+      this.drivers.push({
+        address: i,
+        laps: 0,
+        fuel: 0,
+        position: 0,
+        pits: 0
+      });
+    }
+  }
+
+  async close() {
+    return this.connection.close();
+  }
+
+  // Sende-Nutzfunktion
+  async request(buf, maxLen=null) {
+    log("Sende: " + new TextDecoder().decode(buf));
+    await this.connection.send(buf);
+    let res = await this.connection.recv(maxLen);
+    log("Empfangen: " + new TextDecoder().decode(res));
+    return res;
+  }
+
+  // ---- hier alle public methods ----
+  async version() {
+    // => "0" Befehl => CU schickt Version
+    const buf = new Uint8Array([0x30]); // '0'
+    let res = await this.request(buf);
+    // z.B. python: protocol.unpack("x4sC", res)[0]
+    // Minimalauswertung:
+    if (res.length >= 6) {
+      const versionBytes = res.slice(1, 5); // 4 bytes
+      return new TextDecoder().decode(versionBytes);
+    }
+    return "Unknown";
+  }
+
+  async press(buttonID) {
+    // press => "T" => cYC
+    // buttonID => nibble
+    // => e.g. pack("cYC", b"T", button_id)
+    const prefix = new Uint8Array([0x54]); // 'T'
+    const msg = CarreraProtocol.pack("cY", prefix, buttonID);
+    // C => wir hängen ne checksum an
+    const finalMsg = new Uint8Array([...msg, ...CarreraProtocol.pack("C")]);
+    await this.request(finalMsg);
+  }
+
+  async start() {
+    // Start/Enter => ID=2
+    await this.press(2);
+  }
+  async pressPaceCar() {
+    // PACE_CAR_ESC_BUTTON_ID = 1
+    await this.press(1);
+  }
+  async pressSpeed() {
+    // SPEED_BUTTON_ID = 5
+    await this.press(5);
+  }
+  async pressBrake() {
+    // BRAKE_BUTTON_ID = 6
+    await this.press(6);
+  }
+  async pressFuel() {
+    // FUEL_BUTTON_ID = 7
+    await this.press(7);
+  }
+  async pressCode() {
+    // CODE_BUTTON_ID = 8
+    await this.press(8);
+  }
+
+  async reset() {
+    // protocol.pack("cYYC", b"=", 1, 0)
+    const prefix = new Uint8Array([0x3D]); // '='
+    // c => prefix; Y => 1, Y => 0 => 2 nibbles => 2, then C => checksum
+    let msg = CarreraProtocol.pack("cYY", prefix, 1, 0);
+    msg = new Uint8Array([...msg, ...CarreraProtocol.pack("C")]);
+    await this.request(msg);
+  }
+
+  async clrpos() {
+    // clear/reset pos tower => setword(6, 0, 9)
+    await this.setword(6, 0, 9, 1);
+  }
+
+  async setlap(value) {
+    if (value < 0 || value > 255) throw new Error("Lap value out of range");
+    const hi = value >> 4;
+    const lo = value & 0xF;
+    await this.setlap_hi(hi);
+    await this.setlap_lo(lo);
+  }
+
+  async setlap_hi(value) {
+    // => setword(17, 7, value)
+    await this.setword(17, 7, value, 1);
+  }
+
+  async setlap_lo(value) {
+    // => setword(18, 7, value)
+    await this.setword(18, 7, value, 1);
+  }
+
+  async setpos(address, position) {
+    if (position < 1 || position > 8) throw new Error("Position out of range");
+    await this.setword(6, address, position, 1);
+  }
+
+  async setspeed(address, value) {
+    // => setword(0, address, value, repeat=2)
+    await this.setword(0, address, value, 2);
+  }
+
+  async setfuel(address, value) {
+    // => setword(2, address, value, repeat=2)
+    await this.setword(2, address, value, 2);
+  }
+
+  async setbrake(address, value) {
+    // => setword(1, address, value, repeat=2)
+    await this.setword(1, address, value, 2);
+  }
+
+  async setword(word, address, value, repeat=1) {
+    if (word < 0 || word > 31) throw new Error("Command word out of range");
+    if (address < 0 || address > 7) throw new Error("Address out of range");
+    if (value < 0 || value > 15) throw new Error("Value out of range");
+    if (repeat < 1 || repeat > 15) throw new Error("Repeat out of range");
+
+    // => pack("cBYYC", b"J", word | address << 5, value, repeat)
+    const prefix = new Uint8Array([0x4A]); // 'J'
+    const combined = (word & 0x1F) | (address << 5);
+    let msg = CarreraProtocol.pack("cBYY", prefix, combined, value, repeat);
+    msg = new Uint8Array([...msg, ...CarreraProtocol.pack("C")]);
+    await this.request(msg);
+  }
+
+  async poll() {
+    // => request("?") => Timer or Status
+    const msg = new Uint8Array([0x3F]); // '?'
+    let res = await this.request(msg);
+    // Minimale Auswertung => wir schauen auf erstes Byte
+    if (res[0] === 0x3F && res[1] === 0x3A) {
+      // => "?:", => Status
+      // Hier könnte man detailiert auspacken
+      log("Erkannt: Status");
+      // Bsp. Fuel, Start, Mode, Pit ...
+      return { type: "Status" };
+    } else if (res[0] === 0x3F) {
+      // => "?some"
+      // => Timer
+      log("Erkannt: Timer Event");
+      return { type: "Timer" };
+    }
+    return null;
+  }
+}
+
+// --------------------------------------------------------------
+// GLOBALE Variablen, UI-Funktionen
+// --------------------------------------------------------------
+let cu = null;            // die globale ControlUnit
+let activeConnection = null; // SerConn oder BLEConn
+
+async function connectSerial() {
+  try {
+    const conn = new SerialConnection();
+    await conn.open();
+    log("SerialConnection geöffnet.");
+    activeConnection = conn;
+    cu = new ControlUnit(conn);
+    const ver = await cu.version();
+    log("CU Version: " + ver);
+    refreshDriversTable();
+  } catch(err) {
+    log("Fehler bei connectSerial: " + err);
+  }
+}
+
+async function connectBLE() {
+  try {
+    const conn = new BLEConnection();
+    await conn.open();
+    log("BLEConnection geöffnet.");
+    activeConnection = conn;
+    cu = new ControlUnit(conn);
+    const ver = await cu.version();
+    log("CU Version: " + await ver);
+    refreshDriversTable();
+  } catch(err) {
+    log("Fehler bei connectBLE: " + err);
+  }
+}
+
+async function disconnect() {
+  if (!activeConnection) {
+    log("Keine Verbindung offen.");
+    return;
+  }
+  await activeConnection.close();
+  activeConnection = null;
+  cu = null;
+  log("Verbindung getrennt.");
+}
+
+// -- Buttons / UI --
+async function startRace() {
+  if (!cu) return;
+  await cu.start();
+}
+
+async function pressPaceCar() {
+  if (!cu) return;
+  await cu.pressPaceCar();
+}
+
+async function pressSpeed() {
+  if (!cu) return;
+  await cu.pressSpeed();
+}
+
+async function pressBrake() {
+  if (!cu) return;
+  await cu.pressBrake();
+}
+
+async function pressFuel() {
+  if (!cu) return;
+  await cu.pressFuel();
+}
+
+async function pressCode() {
+  if (!cu) return;
+  await cu.pressCode();
+}
+
+async function resetCU() {
+  if (!cu) return;
+  await cu.reset();
+}
+
+async function clearPosTower() {
+  if (!cu) return;
+  await cu.clrpos();
+}
+
+async function setLapManual() {
+  if (!cu) return;
+  const value = parseInt(document.getElementById('lapValue').value, 10);
+  await cu.setlap(value);
+}
+
+async function setSpeed() {
+  if (!cu) return;
+  // Demo: address=0, value=5
+  await cu.setspeed(0, 5);
+}
+
+async function setFuel() {
+  if (!cu) return;
+  // Demo: address=0, value=10
+  await cu.setfuel(0, 10);
+}
+
+async function setBrake() {
+  if (!cu) return;
+  // Demo: address=0, value=3
+  await cu.setbrake(0, 3);
+}
+
+async function pollCU() {
+  if (!cu) return;
+  const data = await cu.poll();
+  log("Poll returned: " + JSON.stringify(data));
+}
+
+// Einfaches HTML-Update
+function refreshDriversTable() {
+  // cu.drivers => 8 stück
+  const tbody = document.getElementById("driversBody");
+  tbody.innerHTML = "";
+  if (!cu) return;
+  for (let d of cu.drivers) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${d.address}</td>
+      <td>${d.position}</td>
+      <td>${d.laps}</td>
+      <td>${d.fuel}</td>
+      <td>${d.pits}</td>
+    `;
+    tbody.appendChild(tr);
+  }
+}
+
+</script>
+
+</body>
+</html>
