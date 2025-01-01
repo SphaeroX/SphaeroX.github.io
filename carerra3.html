@@ -1,0 +1,1126 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Carrera JS Demo</title>
+    <style>
+      body {
+        font-family: sans-serif;
+        margin: 20px;
+      }
+      #log {
+        white-space: pre;
+        border: 1px solid #ccc;
+        padding: 10px;
+        max-height: 300px;
+        overflow: auto;
+      }
+      button {
+        margin: 5px;
+      }
+      .hidden {
+        display: none;
+      }
+      table {
+        border-collapse: collapse;
+        margin-top: 10px;
+      }
+      th, td {
+        padding: 6px 10px;
+        border: 1px solid #ccc;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Carrera JS Demo</h1>
+    <button id="btnScan">Scan &amp; Connect to CU</button>
+    <button id="btnStartRace" class="hidden">Start Race</button>
+    <button id="btnReset" class="hidden">Reset</button>
+    <button id="btnPaceCar" class="hidden">Pace Car/ESC</button>
+    <button id="btnSpeed" class="hidden">Speed</button>
+    <button id="btnBrake" class="hidden">Brake</button>
+    <button id="btnFuel" class="hidden">Fuel</button>
+    <button id="btnCode" class="hidden">Code</button>
+    
+    <div id="info" class="hidden">
+      <h2>Device Info</h2>
+      <p id="cuVersion">CU Version: --</p>
+      <p id="status">Status: Not connected</p>
+      <p>
+        <b>Top 5 Lap Times</b><br/>
+        <span id="topLaps">-</span>
+      </p>
+      <p>
+        <b>Top 5 Sector Times</b><br/>
+        <span id="topSectors">-</span>
+      </p>
+      <h2>Drivers</h2>
+      <table id="driversTable">
+        <thead>
+          <tr>
+            <th>Pos</th>
+            <th>Car#</th>
+            <th>Last Lap Time</th>
+            <th>Best Lap</th>
+            <th>Laps</th>
+            <th>Pits</th>
+            <th>Fuel</th>
+          </tr>
+        </thead>
+        <tbody>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Log</h3>
+    <div id="log"></div>
+
+    <script>
+/**
+ * Simple logger to #log div
+ */
+function log(msg) {
+  const el = document.getElementById("log");
+  el.textContent += msg + "\n";
+  el.scrollTop = el.scrollHeight;
+}
+
+/**
+ * ======== PROTOCOL LOGIC (PACK/UNPACK) ========
+ * Mirrors much of the Python code in `protocol.py`.
+ */
+class ProtocolError extends Error {}
+class ChecksumError extends Error {}
+
+/**
+ * Compute the protocol checksum (same logic as Python's `chksum`).
+ * Sum of bytes modulo 16 (i.e., `& 0x0F`).
+ */
+function chksum(buf, offset = 0, size = null) {
+  const n = buf.length;
+  if (offset < 0) {
+    throw new Error("offset is negative");
+  } else if (n < offset) {
+    throw new Error("buffer length < offset");
+  }
+  if (size == null) {
+    size = n - offset;
+  } else if (size < 0) {
+    throw new Error("size is negative");
+  } else if (offset + size > n) {
+    throw new Error("buffer length < offset + size");
+  }
+
+  let sumVal = 0;
+  for (let i = offset; i < offset + size; i++) {
+    sumVal += buf[i];
+  }
+  return sumVal & 0x0f;
+}
+
+/**
+ * Pack the given arguments according to a format string.
+ * We replicate the relevant packing logic from `_pack_B`, `_pack_c`, etc.
+ * For demonstration, we only handle some key format specs used in the code.
+ */
+function pack(format, ...args) {
+  // Example usage from Python: "cBYYC", b"J", word | address << 5, value, repeat
+  // We'll parse a simplified subset of that format.
+  // This is quite extensive if we do it for real. We'll keep the main ones used by the code.
+
+  // We'll attempt a minimal parse for the sake of demonstration.
+  // If you need 100% parity with the Python logic, you’d fully replicate the regex logic, etc.
+  let buf = [];
+
+  // Simple function to push one byte
+  function pushByte(byte) {
+    buf.push(byte & 0xff);
+  }
+
+  // Convert next arg to array of bytes if it’s a string or typed array
+  let argIndex = 0;
+  function nextArg() {
+    if (argIndex >= args.length) {
+      throw new Error("Insufficient arguments to pack()");
+    }
+    return args[argIndex++];
+  }
+
+  let i = 0;
+  while (i < format.length) {
+    let c = format[i];
+    switch (c) {
+      case "c": {
+        // 'c' => single byte from a string or an array
+        // The Python code does `if not isinstance(arg, bytes) or len(arg) != 1: ...`
+        let value = nextArg();
+        if (typeof value === "string") {
+          // If string, just take its charCodeAt(0)
+          pushByte(value.charCodeAt(0));
+        } else if (value instanceof Uint8Array) {
+          if (value.length !== 1) {
+            throw new Error("'c' format requires a single byte");
+          }
+          pushByte(value[0]);
+        } else if (Array.isArray(value)) {
+          if (value.length !== 1) {
+            throw new Error("'c' format requires a single byte array");
+          }
+          pushByte(value[0]);
+        } else {
+          // fallback if user gave a number
+          pushByte(value & 0xff);
+        }
+        break;
+      }
+      case "r": {
+        // 'r' => raw bytes repeated
+        let sizeStr = "";
+        // If there's a number after 'r', parse it
+        let j = i + 1;
+        while (j < format.length && !isNaN(format[j]) && format[j] !== " ") {
+          sizeStr += format[j];
+          j++;
+        }
+        let count = sizeStr ? parseInt(sizeStr, 10) : null;
+        if (count == null || isNaN(count)) {
+          // We interpret from the usage `cr{len(block)}s` or so
+          count = 1; // fallback
+        } else {
+          i = j - 1;
+        }
+
+        let value = nextArg();
+        // value should be an array or typed array
+        if (typeof value === "string") {
+          // convert the entire string
+          for (let k = 0; k < value.length; k++) {
+            pushByte(value.charCodeAt(k));
+          }
+        } else if (value instanceof Uint8Array) {
+          for (let b of value) {
+            pushByte(b);
+          }
+        } else if (Array.isArray(value)) {
+          for (let b of value) {
+            pushByte(b);
+          }
+        }
+        break;
+      }
+      case "B": {
+        // 'B' => (like _pack_B) two nibbles in ASCII-coded form
+        // used for e.g. "cBYYC"
+        let value = nextArg(); // it might be a single byte
+        // store in nibble form => (value & 0xF), (value >> 4)
+        // but in Python code, it does base+((arg >> 4) & 0xF).
+        // We’ll do a simpler approach: pushByte(base + (value & 0xF)), etc.
+        // By default, base = ord('0') => 48
+        let base = 48;
+        if (value < 0 || value > 0xff) {
+          throw new Error("'B' format argument out of range");
+        }
+        const loNibble = (value & 0x0f);
+        const hiNibble = (value >> 4) & 0x0f;
+        pushByte(base + loNibble);
+        pushByte(base + hiNibble);
+        break;
+      }
+      case "Y": {
+        // 'Y' => a single nibble in ASCII-coded form
+        let value = nextArg();
+        if (value < 0 || value > 0xf) {
+          throw new Error("'Y' format argument out of range");
+        }
+        let base = 48;
+        pushByte(base + value);
+        break;
+      }
+      case "I": {
+        // 'I' => 32-bit integer, nibble-encoded
+        let value = nextArg();
+        if (value < 0 || value > 0xffffffff) {
+          throw new Error("'I' format argument out of range");
+        }
+        let base = 48; 
+        // The python code splits out 8 nibbles in some reversed pattern. We replicate that:
+        // ex: _pack_I => big-end nibble weirdness
+        const nibblePairs = [
+          (value >> 24) & 0x0f,
+          (value >> 28) & 0x0f,
+          (value >> 16) & 0x0f,
+          (value >> 20) & 0x0f,
+          (value >> 8) & 0x0f,
+          (value >> 12) & 0x0f,
+          (value >> 0) & 0x0f,
+          (value >> 4) & 0x0f
+        ];
+        for (let nib of nibblePairs) {
+          pushByte(base + nib);
+        }
+        break;
+      }
+      case "s": {
+        // 's' => a string/bytes of a certain length, possibly padded
+        let sizeStr = "";
+        let j = i + 1;
+        while (j < format.length && !isNaN(format[j]) && format[j] !== " ") {
+          sizeStr += format[j];
+          j++;
+        }
+        let count = sizeStr ? parseInt(sizeStr, 10) : null;
+        if (!count) {
+          count = 1;
+        } else {
+          i = j - 1;
+        }
+        let value = nextArg();
+        // if it's a string, convert to bytes
+        let bytes = [];
+        if (typeof value === "string") {
+          for (let k = 0; k < value.length; k++) {
+            bytes.push(value.charCodeAt(k));
+          }
+        } else if (value instanceof Uint8Array) {
+          bytes = Array.from(value);
+        } else if (Array.isArray(value)) {
+          bytes = value;
+        }
+        // pad if needed
+        while (bytes.length < count) {
+          bytes.push(48); // pad with '0'
+        }
+        bytes = bytes.slice(0, count);
+        for (let b of bytes) {
+          pushByte(b);
+        }
+        break;
+      }
+      case "C": {
+        // 'C' => checksum of everything so far, appended
+        // the python logic is _pack_C => `buf.append(base + chksum(buf, offset, len(buf) - offset))`
+        // We'll replicate something simpler: we assume offset = offset of last c? 
+        // Let offset be the start of the entire buffer for now:
+        let offsetVal = 0; 
+        let c = chksum(buf, offsetVal, buf.length - offsetVal);
+        let base = 48;
+        pushByte(base + c);
+        break;
+      }
+      default:
+        // skip whitespaces or unknown
+        break;
+    }
+    i++;
+  }
+  return new Uint8Array(buf);
+}
+
+/**
+ * Minimal `unpack` that matches some used patterns:
+ * We won't replicate every possible format from the Python code but enough 
+ * to parse the messages we expect from the CU (like "?..." or "0...").
+ */
+function unpack(format, buf) {
+  // Just a demonstration to parse certain patterns that appear in poll/responses, etc.
+  // Real code might do a fully robust approach.
+
+  // We'll return an array (or tuple) of values
+  let result = [];
+  let arr = Array.from(buf);
+  let i = 0; // index in arr
+  for (let c of format) {
+    switch (c) {
+      case "x": {
+        // skip one byte
+        i += 1;
+        break;
+      }
+      case "Y": {
+        // read nibble from arr[i], but only lower 4 bits
+        let nib = arr[i] & 0x0f;
+        result.push(nib);
+        i++;
+        break;
+      }
+      case "B": {
+        // read 2 bytes => combine nibbles
+        let bLo = arr[i] & 0x0f;
+        let bHi = (arr[i + 1] & 0x0f) << 4;
+        i += 2;
+        result.push(bHi | bLo);
+        break;
+      }
+      case "I": {
+        // read 8 bytes => 32-bit weird nibble pattern
+        // replicate the python logic in _unpack_I
+        // n = (values[offset+0]<<24) + ...
+        if (i + 7 >= arr.length) {
+          throw new Error("Buffer too short for I");
+        }
+        let v0 = (arr[i] & 0x0f) << 24;
+        let v1 = (arr[i + 1] & 0x0f) << 28;
+        let v2 = (arr[i + 2] & 0x0f) << 16;
+        let v3 = (arr[i + 3] & 0x0f) << 20;
+        let v4 = (arr[i + 4] & 0x0f) << 8;
+        let v5 = (arr[i + 5] & 0x0f) << 12;
+        let v6 = (arr[i + 6] & 0x0f) << 0;
+        let v7 = (arr[i + 7] & 0x0f) << 4;
+        let n = v0 | v1 | v2 | v3 | v4 | v5 | v6 | v7;
+        i += 8;
+        result.push(n >>> 0); // keep it unsigned
+        break;
+      }
+      case "c": {
+        // read 1 byte
+        result.push(arr[i]);
+        i += 1;
+        break;
+      }
+      case "s": {
+        // read specified number of bytes as array or string
+        // for simplicity, read next 4 bytes:
+        if (i + 3 >= arr.length) {
+          throw new Error("Buffer too short for s");
+        }
+        let sub = arr.slice(i, i + 4);
+        result.push(String.fromCharCode(...sub));
+        i += 4;
+        break;
+      }
+      default:
+        // skip
+        break;
+    }
+  }
+
+  return result;
+}
+
+/**
+ * ======== CONNECTION / BLE CONNECTION ========
+ * "Connection" base class, and "BLEConnection" that uses Web Bluetooth.
+ */
+class ConnectionError extends Error {}
+class BufferTooShort extends ConnectionError {}
+class TimeoutError extends ConnectionError {}
+
+class Connection {
+  constructor(device, options = {}) {}
+  close() {}
+  recv(maxlength = null) {
+    throw new Error("Not implemented");
+  }
+  send(buf, offset = 0, size = null) {
+    throw new Error("Not implemented");
+  }
+}
+
+class BLEConnection extends Connection {
+  constructor() {
+    super();
+    this._device = null;
+    this._server = null;
+    this._service = null;
+    this._charOutput = null;
+    this._charNotify = null;
+
+    this._receiveQueue = [];
+    this._notifyCallback = this._notifyCallback.bind(this);
+
+    // If you want to match exact UUIDs from the Python code:
+    //   SERVICE_UUID = "39df7777-b1b4-b90b-57f1-7144ae4e4a6a"
+    //   OUTPUT_UUID  = "39df8888-b1b4-b90b-57f1-7144ae4e4a6a"
+    //   NOTIFY_UUID  = "39df9999-b1b4-b90b-57f1-7144ae4e4a6a"
+    // But we also can rely on the device name "Control_Unit"
+    this.SERVICE_UUID = "39df7777-b1b4-b90b-57f1-7144ae4e4a6a".toLowerCase();
+    this.CHAR_OUTPUT_UUID = "39df8888-b1b4-b90b-57f1-7144ae4e4a6a".toLowerCase();
+    this.CHAR_NOTIFY_UUID = "39df9999-b1b4-b90b-57f1-7144ae4e4a6a".toLowerCase();
+
+    this.max_fwu_block_size = 18; // as in python
+  }
+
+  async open() {
+    // Request device
+    this._device = await navigator.bluetooth.requestDevice({
+      filters: [{ name: "Control_Unit" }],
+      optionalServices: [this.SERVICE_UUID],
+    });
+    if (!this._device) {
+      throw new Error("No device selected");
+    }
+    this._device.addEventListener("gattserverdisconnected", () => {
+      log("BLE device disconnected");
+    });
+
+    // Connect
+    this._server = await this._device.gatt.connect();
+    if (!this._server) {
+      throw new Error("GATT Server not found");
+    }
+
+    // Get service
+    this._service = await this._server.getPrimaryService(this.SERVICE_UUID);
+
+    // Get characteristics
+    this._charOutput = await this._service.getCharacteristic(this.CHAR_OUTPUT_UUID);
+    this._charNotify = await this._service.getCharacteristic(this.CHAR_NOTIFY_UUID);
+
+    // Start notifications
+    await this._charNotify.startNotifications();
+    this._charNotify.addEventListener("characteristicvaluechanged", this._notifyCallback);
+
+    log("Connected to BLE device and started notifications.");
+  }
+
+  close() {
+    if (this._device && this._device.gatt && this._device.gatt.connected) {
+      this._device.gatt.disconnect();
+      log("BLE device disconnected via close()");
+    }
+  }
+
+  /**
+   * Notification callback => push incoming data to queue.
+   */
+  _notifyCallback(event) {
+    const value = event.target.value;
+    const buf = new Uint8Array(value.buffer);
+    // If the python code expects certain line endings, 
+    // we replicate how `recv()` in python might see them
+    // We push the entire buffer into a queue
+    this._receiveQueue.push(buf);
+    // log("Notify: " + buf);
+  }
+
+  /**
+   * Mimics the "recv" blocking call from Python.
+   * We'll simply return the first item in the queue. 
+   * If queue is empty, we throw TimeoutError or wait a bit.
+   */
+  async recv(maxlength = null, timeoutMs = 1000) {
+    const start = performance.now();
+    while (this._receiveQueue.length === 0) {
+      if (performance.now() - start > timeoutMs) {
+        throw new TimeoutError("Timeout waiting for BLE input");
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    let buf = this._receiveQueue.shift();
+
+    // The python code for BLE manipulates the trailing '$'
+    // We'll replicate that logic from ble.py:
+    // if (buf.endswith(b"$")) ...
+    if (buf[buf.length - 1] === 0x24) {
+      // '$'
+      // python code says if len(buf) == 6 => '0'+ buf[:-1]
+      // else => '?' + buf[:-1]
+      if (buf.length === 6) {
+        let newBuf = new Uint8Array(buf.length);
+        newBuf[0] = "0".charCodeAt(0);
+        newBuf.set(buf.slice(0, -1), 1);
+        buf = newBuf.slice(0, buf.length);
+      } else {
+        let newBuf = new Uint8Array(buf.length);
+        newBuf[0] = "?".charCodeAt(0);
+        newBuf.set(buf.slice(0, -1), 1);
+        buf = newBuf.slice(0, buf.length);
+      }
+    }
+
+    if (maxlength !== null && buf.length > maxlength) {
+      throw new BufferTooShort("Buffer too short for data received");
+    }
+    return buf;
+  }
+
+  /**
+   * Send data out
+   */
+  async send(buf, offset = 0, size = null) {
+    const n = buf.length;
+    if (offset < 0) throw new Error("offset is negative");
+    if (n < offset) throw new Error("buffer length < offset");
+    if (size == null) {
+      size = n - offset;
+    } else if (size < 0) {
+      throw new Error("size is negative");
+    } else if (offset + size > n) {
+      throw new Error("buffer length < offset + size");
+    }
+    const dataToSend = buf.slice(offset, offset + size);
+    // Write out
+    await this._charOutput.writeValue(dataToSend);
+  }
+}
+
+/**
+ * Open a BLE Connection
+ */
+async function openConnection() {
+  let conn = new BLEConnection();
+  await conn.open();
+  return conn;
+}
+
+/**
+ * ======== CONTROL UNIT LOGIC ========
+ * This replicates many methods from cu.py
+ */
+class ControlUnit {
+  constructor(connection) {
+    this._connection = connection; 
+  }
+
+  close() {
+    this._connection.close();
+  }
+
+  async request(buf, maxlength = null) {
+    // send, then read response
+    // in python: self.__connection.send(buf) => while True => res = self.__connection.recv(...) => ...
+    await this._connection.send(buf);
+    while (true) {
+      const res = await this._connection.recv(maxlength, 2000); // wait up to 2s
+      if (!res || res.length === 0) {
+        log("Received unknown empty response");
+        break;
+      } else if (res[0] === buf[0]) {
+        // matching first byte
+        return res;
+      } else {
+        log("Received unexpected message: " + String.fromCharCode(...res));
+        // keep looping
+      }
+    }
+    return null;
+  }
+
+  async version() {
+    const res = await this.request(new Uint8Array([ "0".charCodeAt(0) ]));
+    if (res) {
+      // python does:  protocol.unpack("x4sC", res)[0].decode()
+      // We do a small parse
+      // skip first byte => read next 4 => that’s the version string
+      if (res.length >= 5) {
+        const versionChars = res.slice(1, 5);
+        let version = String.fromCharCode(...versionChars);
+        return version.trim();
+      }
+    }
+    return null;
+  }
+
+  async press(buttonId) {
+    // "cYC", b"T", button_id
+    const msg = pack("cYC", "T".charCodeAt(0), buttonId);
+    await this.request(msg);
+  }
+
+  async start() {
+    // press start button
+    await this.press(ControlUnit.START_ENTER_BUTTON_ID);
+  }
+
+  async reset() {
+    // "cYYC", b"=", 1, 0
+    const msg = pack("cYYC", "=".charCodeAt(0), 1, 0);
+    await this.request(msg);
+  }
+
+  async poll() {
+    // python => res = self.request(b"?")
+    // then parse if it starts with b"?:", etc.
+    const msg = new Uint8Array([ "?".charCodeAt(0) ]);
+    const res = await this.request(msg);
+    if (!res) return null;
+    // check the first two bytes
+    if (res[0] === "?".charCodeAt(0) && res[1] === ":".charCodeAt(0)) {
+      // parse status
+      // python tries: protocol.unpack("2x8YYYBYC", res)
+      // That’s complicated. We'll do a partial parse or replicate the logic.
+      // The first 2 are "?:", skip them => then read 8 "Y" => etc.
+      // We'll do a minimal parse for demonstration.
+      let fuel = [];
+      // next 8 'Y'
+      let idx = 2;
+      for (let i=0; i<8; i++) {
+        fuel.push(res[idx] & 0x0f);
+        idx++;
+      }
+      // then 3 "Y" => start, mode, pitmask
+      let start = res[idx] & 0x0f; idx++;
+      let mode = res[idx] & 0x0f; idx++;
+      let pitmask = res[idx] & 0x0f; idx++;
+      // then "B" => display => next 2 bytes => nibble decode
+      let bLo = res[idx] & 0x0f;
+      let bHi = (res[idx+1] & 0x0f) << 4;
+      let display = (bHi | bLo);
+      idx += 2;
+      // skip checksum or parse it
+      // Return a "Status" object
+      return {
+        type: "status",
+        fuel,
+        start,
+        mode,
+        pitmask,
+        display
+      };
+    } else if (res[0] === "?".charCodeAt(0)) {
+      // parse timer => protocol.unpack("xYIYC", res)
+      // skip 1 => read Y => read I => read Y => read C
+      // We'll do a minimal approach:
+      // skip first byte => read nibble => address => read I => read nibble => sector => read checks
+      let idx = 1;
+      let address = res[idx] & 0x0f; 
+      idx++;
+      // read I => 8 bytes
+      if (idx + 7 < res.length) {
+        let v0 = (res[idx] & 0x0f) << 24;
+        let v1 = (res[idx+1] & 0x0f) << 28;
+        let v2 = (res[idx+2] & 0x0f) << 16;
+        let v3 = (res[idx+3] & 0x0f) << 20;
+        let v4 = (res[idx+4] & 0x0f) << 8;
+        let v5 = (res[idx+5] & 0x0f) << 12;
+        let v6 = (res[idx+6] & 0x0f) << 0;
+        let v7 = (res[idx+7] & 0x0f) << 4;
+        let timestamp = (v0 | v1 | v2 | v3 | v4 | v5 | v6 | v7) >>> 0;
+        idx+=8;
+        let sector = res[idx] & 0x0f; 
+        idx++;
+        return {
+          type: "timer",
+          address: address - 1,
+          timestamp,
+          sector
+        };
+      }
+    }
+    return null;
+  }
+
+  async setword(word, address, value, repeat = 1) {
+    if (word < 0 || word > 31) {
+      throw new Error("Command word out of range");
+    }
+    if (address < 0 || address > 7) {
+      throw new Error("Address out of range");
+    }
+    if (value < 0 || value > 15) {
+      throw new Error("Value out of range");
+    }
+    if (repeat < 1 || repeat > 15) {
+      throw new Error("Repeat count out of range");
+    }
+    // "cBYYC", b"J", word | address << 5, value, repeat
+    let w = (word | (address << 5)) & 0xff;
+    const msg = pack("cBYYC", "J".charCodeAt(0), w, value, repeat);
+    await this.request(msg);
+  }
+
+  async setspeed(address, value) {
+    await this.setword(0, address, value, 2);
+  }
+  async setbrake(address, value) {
+    await this.setword(1, address, value, 2);
+  }
+  async setfuel(address, value) {
+    await this.setword(2, address, value, 2);
+  }
+  async clrpos() {
+    // setword(6, 0, 9)
+    await this.setword(6, 0, 9);
+  }
+  async setpos(address, position) {
+    if (position < 1 || position > 8) {
+      throw new Error("Position out of range");
+    }
+    await this.setword(6, address, position);
+  }
+  async setlap(value) {
+    if (value < 0 || value > 255) {
+      throw new Error("Lap value out of range");
+    }
+    await this.setlap_hi(value >> 4);
+    await this.setlap_lo(value & 0xf);
+  }
+  async setlap_hi(value) {
+    await this.setword(17, 7, value);
+  }
+  async setlap_lo(value) {
+    await this.setword(18, 7, value);
+  }
+
+  // Example for firmware update:
+  async fwu_start() {
+    // "ccC", b"G", b"B"
+    const msg = pack("ccC", "G".charCodeAt(0), "B".charCodeAt(0));
+    await this.request(msg);
+  }
+  async fwu_write(data) {
+    // see python fwu_write
+    // chunk if max_fwu_block_size is set, etc.
+    if (!this._connection.max_fwu_block_size) {
+      const msg = pack(`c${data.length}sC`, "E".charCodeAt(0), data);
+      await this.request(msg);
+    } else {
+      let n = this._connection.max_fwu_block_size;
+      for (let i=0; i<data.length; i+=n) {
+        let block = data.slice(i, i+n);
+        // "cr{len(block)}s", b"F", len(block), block
+        const msg = pack(`cr${block.length}s`, "F".charCodeAt(0), block.length, block);
+        await this.request(msg);
+      }
+      const msg2 = pack("cC", "E".charCodeAt(0));
+      await this.request(msg2);
+    }
+  }
+}
+
+// Some button IDs from Python
+ControlUnit.PACE_CAR_ESC_BUTTON_ID = 1;
+ControlUnit.START_ENTER_BUTTON_ID = 2;
+ControlUnit.SPEED_BUTTON_ID = 5;
+ControlUnit.BRAKE_BUTTON_ID = 6;
+ControlUnit.FUEL_BUTTON_ID = 7;
+ControlUnit.CODE_BUTTON_ID = 8;
+
+/**
+ * ======== RACE MANAGER (similar to RMS in __main__.py) ========
+ * Tracks drivers, lap times, etc. 
+ * Adds top 5 times and top 5 sector times, etc.
+ */
+class Driver {
+  constructor(num) {
+    this.num = num;
+    this.time = null; // last crossing
+    this.laptime = null;
+    this.bestlap = null;
+    this.laps = 0;
+    this.pits = 0;
+    this.fuel = 0;
+    this.pit = false;
+  }
+  newLap(timerTimestamp) {
+    if (this.time !== null) {
+      this.laptime = timerTimestamp - this.time;
+      if (this.bestlap === null || this.laptime < this.bestlap) {
+        this.bestlap = this.laptime;
+      }
+      this.laps++;
+    }
+    this.time = timerTimestamp;
+  }
+}
+
+function msToString(ms) {
+  if (ms === null || ms === undefined) return "n/a";
+  let s = Math.floor(ms / 1000);
+  let milli = ms % 1000;
+  if (s < 60) {
+    return `${s}.${milli.toString().padStart(3, '0')}s`;
+  }
+  let mins = Math.floor(s / 60);
+  let secs = s % 60;
+  return `${mins}m${secs}.${milli.toString().padStart(3, '0')}s`;
+}
+
+class RaceManager {
+  constructor(cu) {
+    this.cu = cu;
+    this.drivers = [];
+    for (let i=1; i<=8; i++) {
+      this.drivers.push(new Driver(i));
+    }
+    this.start = null;
+    this.maxlaps = 0;
+    this.lapTimes = [];     // track all laptimes to filter top5
+    this.sectorTimes = [];  // track all sector times for top5 sector times
+  }
+
+  async resetAll() {
+    this.drivers.forEach(d => {
+      d.time = null;
+      d.laptime = null;
+      d.bestlap = null;
+      d.laps = 0;
+      d.pits = 0;
+      d.fuel = 0;
+      d.pit = false;
+    });
+    this.start = null;
+    this.maxlaps = 0;
+    this.lapTimes = [];
+    this.sectorTimes = [];
+
+    // poll until we get a status
+    let status = null;
+    do {
+      status = await this.cu.poll();
+    } while (status && status.type !== "status");
+    
+    // reset cu timer & position tower
+    await this.cu.reset();
+    await this.cu.clrpos();
+  }
+
+  /**
+   * Handle incoming 'status' object from poll()
+   */
+  handleStatus(status) {
+    // status.fuel => array of 8
+    // status.pitmask => we can check each bit for pit
+    for (let i=0; i<8; i++) {
+      const d = this.drivers[i];
+      d.fuel = status.fuel[i];
+      let pit = !!((status.pitmask >> i) & 1);
+      if (pit && !d.pit) {
+        d.pits++;
+      }
+      d.pit = pit;
+    }
+  }
+
+  /**
+   * Handle incoming 'timer' object from poll()
+   */
+async handleTimer(timer) {
+  const d = this.drivers[timer.address];
+
+  // Ersten Zeitstempel für diesen Fahrer merken
+  if (!d.sectorStart) {
+    d.sectorStart = timer.timestamp;
+  }
+
+  // Zeit seit letztem Sektor
+  const sectorTime = timer.timestamp - d.sectorStart;
+  d.sectorStart = timer.timestamp;
+
+  // Sektor-Logik
+  if (timer.sector === 1) {
+    // Start/Ziel => damit wird die Runde beendet
+    if (d.sector2Time != null && d.sector3Time != null) {
+      // Runde = Summe aller Sektoren (hier: 3-Teilig)
+      d.laptime = d.sector1Time + d.sector2Time + d.sector3Time;
+    } else {
+      // Falls Check Lanes nicht vorhanden oder erst 1 Sektor
+      d.laptime = sectorTime;
+    }
+
+    // Statistik: neue Runde
+    this.lapTimes.push(d.laptime);
+    d.newLap(timer.timestamp);
+
+    // Sektordaten zurücksetzen
+    d.sector1Time = 0;
+    d.sector2Time = null;
+    d.sector3Time = null;
+  }
+  else if (timer.sector === 2) {
+    // Check Lane 1
+    d.sector2Time = sectorTime;
+  }
+  else if (timer.sector === 3) {
+    // Check Lane 2
+    d.sector3Time = sectorTime;
+  }
+
+  // Optional: auch einzelne Sector-Zeiten speichern
+  this.sectorTimes.push(sectorTime);
+
+  // Tower-Update, falls Rundenanzeige genutzt wird
+  if (this.maxlaps < d.laps) {
+    this.maxlaps = d.laps;
+    await this.cu.setlap(this.maxlaps % 250);
+  }
+}
+
+
+  /**
+   * Return top 5 laps sorted ascending
+   */
+  getTop5Laps() {
+    let sorted = this.lapTimes.filter(x => x !== null).sort((a,b) => a - b);
+    return sorted.slice(0,5);
+  }
+
+  /**
+   * Return top 5 sectors sorted ascending
+   */
+  getTop5Sectors() {
+    let sorted = this.sectorTimes.filter(x => x !== null).sort((a,b) => a - b);
+    return sorted.slice(0,5);
+  }
+
+  /**
+   * Return drivers sorted by position (like the posgetter logic).
+   */
+  getSortedDrivers() {
+    // sort by -laps, then by time
+    let driversWithTime = this.drivers.filter(d => d.time !== null);
+    driversWithTime.sort((a,b) => {
+      if (b.laps !== a.laps) return b.laps - a.laps; // desc
+      return a.time - b.time; // asc
+    });
+    return driversWithTime;
+  }
+}
+
+/**
+ * Main UI logic
+ */
+let gConnection = null;
+let gControlUnit = null;
+let gRMS = null;
+let gRunning = false;
+
+async function doScanAndConnect() {
+  try {
+    // open BLE
+    gConnection = await openConnection();
+    gControlUnit = new ControlUnit(gConnection);
+    document.getElementById("btnStartRace").classList.remove("hidden");
+    document.getElementById("btnReset").classList.remove("hidden");
+    document.getElementById("btnPaceCar").classList.remove("hidden");
+    document.getElementById("btnSpeed").classList.remove("hidden");
+    document.getElementById("btnBrake").classList.remove("hidden");
+    document.getElementById("btnFuel").classList.remove("hidden");
+    document.getElementById("btnCode").classList.remove("hidden");
+    document.getElementById("info").classList.remove("hidden");
+
+    // get version
+    let ver = await gControlUnit.version();
+    document.getElementById("cuVersion").textContent = "CU Version: " + (ver || "N/A");
+    document.getElementById("status").textContent = "Status: Connected";
+
+    // init race manager
+    gRMS = new RaceManager(gControlUnit);
+    await gRMS.resetAll();
+
+    // start poll loop
+    pollLoop();
+  } catch (err) {
+    log("Error scanning/connecting: " + err);
+  }
+}
+
+/**
+ * pollLoop: periodically call poll() from the ControlUnit,
+ * handle the data, and update UI.
+ */
+async function pollLoop() {
+  while (true) {
+    if (!gControlUnit) break;
+    try {
+      let data = await gControlUnit.poll();
+      if (data) {
+        if (data.type === "status") {
+          gRMS.handleStatus(data);
+        } else if (data.type === "timer") {
+          await gRMS.handleTimer(data);
+        }
+      }
+      updateUI();
+    } catch (err) {
+      if (err instanceof TimeoutError) {
+        // just ignore, it means no new data
+      } else {
+        log("pollLoop error: " + err);
+        break;
+      }
+    }
+    // small delay
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+}
+
+/**
+ * Update the UI with current info from RaceManager
+ */
+function updateUI() {
+  // update top 5 lap times
+  let topLaps = gRMS.getTop5Laps().map(ms => msToString(ms)).join(", ");
+  if (!topLaps) topLaps = "-";
+  document.getElementById("topLaps").textContent = topLaps;
+
+  // update top 5 sector times
+  let topSectors = gRMS.getTop5Sectors().map(ms => msToString(ms)).join(", ");
+  if (!topSectors) topSectors = "-";
+  document.getElementById("topSectors").textContent = topSectors;
+
+  // update drivers table
+  let sortedDrivers = gRMS.getSortedDrivers();
+  let tbody = document.querySelector("#driversTable tbody");
+  tbody.innerHTML = "";
+  sortedDrivers.forEach((d, idx) => {
+    let tr = document.createElement("tr");
+    let posTd = document.createElement("td");
+    posTd.textContent = (idx+1).toString();
+    let carTd = document.createElement("td");
+    carTd.textContent = d.num;
+    let lastLapTd = document.createElement("td");
+    lastLapTd.textContent = msToString(d.laptime);
+    let bestLapTd = document.createElement("td");
+    bestLapTd.textContent = msToString(d.bestlap);
+    let lapsTd = document.createElement("td");
+    lapsTd.textContent = d.laps;
+    let pitsTd = document.createElement("td");
+    pitsTd.textContent = d.pits;
+    let fuelTd = document.createElement("td");
+    fuelTd.textContent = d.fuel;
+
+    tr.appendChild(posTd);
+    tr.appendChild(carTd);
+    tr.appendChild(lastLapTd);
+    tr.appendChild(bestLapTd);
+    tr.appendChild(lapsTd);
+    tr.appendChild(pitsTd);
+    tr.appendChild(fuelTd);
+
+    tbody.appendChild(tr);
+  });
+}
+
+/**
+ * Event Handlers
+ */
+document.getElementById("btnScan").addEventListener("click", doScanAndConnect);
+document.getElementById("btnStartRace").addEventListener("click", async () => {
+  if (!gControlUnit) return;
+  await gControlUnit.start();
+  log("Start race pressed");
+});
+document.getElementById("btnReset").addEventListener("click", async () => {
+  if (!gRMS) return;
+  await gRMS.resetAll();
+  log("Race reset pressed");
+});
+document.getElementById("btnPaceCar").addEventListener("click", async () => {
+  if (!gControlUnit) return;
+  await gControlUnit.press(ControlUnit.PACE_CAR_ESC_BUTTON_ID);
+  log("Pace Car/ESC pressed");
+});
+document.getElementById("btnSpeed").addEventListener("click", async () => {
+  if (!gControlUnit) return;
+  await gControlUnit.press(ControlUnit.SPEED_BUTTON_ID);
+  log("Speed pressed");
+});
+document.getElementById("btnBrake").addEventListener("click", async () => {
+  if (!gControlUnit) return;
+  await gControlUnit.press(ControlUnit.BRAKE_BUTTON_ID);
+  log("Brake pressed");
+});
+document.getElementById("btnFuel").addEventListener("click", async () => {
+  if (!gControlUnit) return;
+  await gControlUnit.press(ControlUnit.FUEL_BUTTON_ID);
+  log("Fuel pressed");
+});
+document.getElementById("btnCode").addEventListener("click", async () => {
+  if (!gControlUnit) return;
+  await gControlUnit.press(ControlUnit.CODE_BUTTON_ID);
+  log("Code pressed");
+});
+    </script>
+  </body>
+</html>
