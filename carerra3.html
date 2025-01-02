@@ -1083,8 +1083,31 @@ function updateUI() {
 }
 
 /**
+ * Keep Display on
+ */
+let wakeLock = null;
+
+async function requestWakeLock() {
+  try {
+    wakeLock = await navigator.wakeLock.request('screen');
+    log("Wake Lock aktiviert");
+    
+    // Überwache das Entsperren, falls Wake Lock verloren geht
+    wakeLock.addEventListener('release', () => {
+      log("Wake Lock verloren");
+      requestWakeLock();
+    });
+  } catch (err) {
+    log(`Wake Lock Fehler: ${err.name}, ${err.message}`);
+  }
+}
+      
+/**
  * Event Handlers
  */
+document.addEventListener("DOMContentLoaded", () => {
+  requestWakeLock();
+});
 document.getElementById("btnScan").addEventListener("click", doScanAndConnect);
 document.getElementById("btnStartRace").addEventListener("click", async () => {
   if (!gControlUnit) return;
