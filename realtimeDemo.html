@@ -89,7 +89,7 @@
             }
 
             connectWebSocket() {
-                const wsUrl = `wss://realtime-api.openai.com/v1/realtime/sessions/${this.sessionId}/stream?client_secret=${this.clientSecret}`;
+                const wsUrl = `wss://realtime-api.openai.com/v1/realtime/sessions/${this.sessionId}/stream?client_secret=${this.clientSecret}&Authorization=Bearer ${this.apiKey}&OpenAI-Beta=realtime=v1`;
                 console.log('WebSocket URL:', wsUrl);
 
                 this.ws = new WebSocket(wsUrl);
@@ -117,6 +117,7 @@
                     this.reconnect();
                 };
             }
+
 
             async reconnect() {
                 console.log('Session abgelaufen. Starte neue Session...');
