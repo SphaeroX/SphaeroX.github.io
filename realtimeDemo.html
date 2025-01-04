@@ -73,54 +73,61 @@
 
                     const data = await response.json();
                     console.log('data', data);
-                    console.log('response', response);
-                    if (!response.ok) {
+                    if (!response.ok || data.expires_at === 0) {
                         console.error('Session konnte nicht erstellt werden:', data);
-                        alert('Fehler bei der Session-Erstellung: ' + data.message);
+                        alert('Session-Erstellung fehlgeschlagen: ' + data.message);
                         return;
                     }
 
                     this.sessionId = data.id;
                     this.clientSecret = data.client_secret.value;
-                    const wsUrl = `wss://realtime-api.openai.com/v1/realtime/sessions/${this.sessionId}/stream?client_secret=${this.clientSecret}`;
-                    console.log('WebSocket URL:', wsUrl);
-
-                    this.ws = new WebSocket(wsUrl);
-
-                    this.ws.onopen = () => {
-                        console.log('WebSocket verbunden');
-                        alert('Session erfolgreich initialisiert!');
-                    };
-
-                    this.ws.onmessage = (event) => {
-                        const message = JSON.parse(event.data);
-                        console.log('Nachricht erhalten:', message);
-
-                        if (message.type === 'response.done' && message.response.output[0].content[0].audio) {
-                            this.playAudio(message.response.output[0].content[0].audio);
-                        }
-                    };
-
-                    this.ws.onerror = () => {
-                        console.error('WebSocket-Fehler.');
-                        this.ws.close();
-                    };
-
-
-
-                    this.ws.onclose = () => {
-                        console.log('WebSocket getrennt');
-                    };
+                    this.connectWebSocket();
                 } catch (error) {
                     console.error('Fehler bei der Initialisierung:', error);
                     alert('Fehler beim Starten der Session');
                 }
             }
 
+            connectWebSocket() {
+                const wsUrl = `wss://realtime-api.openai.com/v1/realtime/sessions/${this.sessionId}/stream?client_secret=${this.clientSecret}`;
+                console.log('WebSocket URL:', wsUrl);
+
+                this.ws = new WebSocket(wsUrl);
+
+                this.ws.onopen = () => {
+                    console.log('WebSocket verbunden');
+                    this.sendText('Testnachricht zur Verbindung');
+                };
+
+                this.ws.onmessage = (event) => {
+                    const message = JSON.parse(event.data);
+                    console.log('Nachricht erhalten:', message);
+                    if (message.type === 'response.done' && message.response.output[0]?.content[0]?.audio) {
+                        this.playAudio(message.response.output[0].content[0].audio);
+                    }
+                };
+
+                this.ws.onerror = () => {
+                    console.error('WebSocket Fehler');
+                    alert('Verbindung zum WebSocket fehlgeschlagen.');
+                };
+
+                this.ws.onclose = () => {
+                    console.log('WebSocket getrennt. Erstelle neue Session...');
+                    this.reconnect();
+                };
+            }
+
+            async reconnect() {
+                console.log('Session abgelaufen. Starte neue Session...');
+                await this.initializeSession();
+            }
+
             sendText(text) {
                 if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
                     console.error("WebSocket ist nicht verbunden");
-                    alert("WebSocket nicht verbunden. Bitte Session starten.");
+                    alert("WebSocket nicht verbunden. Starte neue Session.");
+                    this.reconnect();
                     return;
                 }
 
@@ -139,33 +146,7 @@
                         ]
                     }
                 };
-
-                console.log('Text gesendet:', message);
                 this.ws.send(JSON.stringify(message));
-            }
-
-            playAudio(base64Audio) {
-                const audioBlob = this.base64ToBlob(base64Audio, 'audio/wav');
-                const audioUrl = URL.createObjectURL(audioBlob);
-                const audio = new Audio(audioUrl);
-                audio.play();
-            }
-
-            base64ToBlob(base64, mimeType) {
-                const byteCharacters = atob(base64);
-                const byteArrays = [];
-
-                for (let offset = 0; offset < byteCharacters.length; offset += 512) {
-                    const slice = byteCharacters.slice(offset, offset + 512);
-                    const byteNumbers = new Array(slice.length);
-                    for (let i = 0; i < slice.length; i++) {
-                        byteNumbers[i] = slice.charCodeAt(i);
-                    }
-                    const byteArray = new Uint8Array(byteNumbers);
-                    byteArrays.push(byteArray);
-                }
-
-                return new Blob(byteArrays, { type: mimeType });
             }
         }
 
@@ -180,16 +161,9 @@
                 return;
             }
 
-            if (!assistant || !assistant.ws || assistant.ws.readyState !== WebSocket.OPEN) {
-                assistant = new OpenAIRealtime(apiKey, "You are a friendly assistant.");
-                await assistant.initializeSession();
-            }
-
-            if (text) {
-                assistant.sendText(text);
-            } else {
-                alert('Bitte Text eingeben.');
-            }
+            assistant = new OpenAIRealtime(apiKey);
+            await assistant.initializeSession();
+            assistant.sendText(text);
         }
     </script>
 
