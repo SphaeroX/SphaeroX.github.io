@@ -3,152 +3,98 @@
 
 <head>
     <meta charset="utf-8" />
-    <title>OpenAI Realtime Demo</title>
+    <title>OpenAI Realtime WebSocket Demo</title>
 </head>
 
 <body>
-    <h1>OpenAI Realtime API Test</h1>
+    <h1>OpenAI Realtime WebSocket Demo</h1>
 
-    <!-- Inputs for API Key and user text -->
     <label for="apiKey">API Key:</label>
-    <input type="text" id="apiKey" placeholder="Enter your API Key" /><br><br>
+    <input type="text" id="apiKey" placeholder="OPENAI_API_KEY" /><br><br>
 
-    <button id="createSessionBtn">Create Realtime Session</button><br><br>
+    <label for="orgId">Organization ID (optional):</label>
+    <input type="text" id="orgId" placeholder="OPENAI_ORG_ID" /><br><br>
 
+    <label for="projectId">Project ID (optional):</label>
+    <input type="text" id="projectId" placeholder="OPENAI_PROJECT_ID" /><br><br>
+
+    <button id="connectBtn">Verbinden</button>
+
+    <hr>
     <label for="userText">Nachricht:</label>
     <input type="text" id="userText" placeholder="Dein Text..." />
     <button id="sendBtn">Senden</button>
 
-    <h2>Antwort:</h2>
+    <h3>Antwort (Text):</h3>
     <div id="responseText"></div>
 
-    <!-- We'll play audio in the browser using the Web Audio API -->
     <script>
         // comments in English
-        let ephemeralKey = null;
-        let sessionId = null;
-        let conversationId = null;
         let ws = null;
 
-        // Audio context to play PCM16 data
-        const audioContext = new AudioContext({ sampleRate: 16000 });
+        // Simple connect using the snippet from your request
+        document.getElementById("connectBtn").onclick = () => {
+            const OPENAI_API_KEY = document.getElementById("apiKey").value.trim();
+            const OPENAI_ORG_ID = document.getElementById("orgId").value.trim();
+            const OPENAI_PROJECT_ID = document.getElementById("projectId").value.trim();
 
-        // Helper to convert base64 PCM16 to AudioBuffer and play
-        async function playPCM16Chunk(base64Chunk) {
-            // Decode base64 to binary
-            const binaryString = atob(base64Chunk);
-            const len = binaryString.length;
-            // Create Int16Array from binary
-            const buffer16 = new Int16Array(len / 2);
-            for (let i = 0; i < len; i += 2) {
-                // Little-endian PCM16
-                const lower = binaryString.charCodeAt(i);
-                const higher = binaryString.charCodeAt(i + 1);
-                const value = (higher << 8) | lower;
-                // Convert signed 16-bit
-                buffer16[i / 2] = value < 32768 ? value : value - 65536;
-            }
-            // Convert Int16 samples to float [-1..1]
-            const float32 = new Float32Array(buffer16.length);
-            for (let i = 0; i < buffer16.length; i++) {
-                float32[i] = buffer16[i] / 32768;
-            }
-
-            // Create AudioBuffer
-            const audioBuffer = audioContext.createBuffer(1, float32.length, 16000);
-            audioBuffer.copyToChannel(float32, 0);
-
-            // Play it
-            const source = audioContext.createBufferSource();
-            source.buffer = audioBuffer;
-            source.connect(audioContext.destination);
-            source.start();
-        }
-
-        document.getElementById('createSessionBtn').onclick = async () => {
-            const key = document.getElementById('apiKey').value.trim();
-            if (!key) {
-                alert("Bitte API Key eingeben!");
+            if (!OPENAI_API_KEY) {
+                alert("Bitte einen API Key eingeben!");
                 return;
             }
 
-            try {
-                // 1) Create Realtime session via REST
-                const resp = await fetch('https://api.openai.com/v1/realtime/sessions', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${key}`
-                    },
-                    body: JSON.stringify({
-                        model: "gpt-4o-realtime-preview-2024-12-17",
-                        modalities: ["audio", "text"],
-                        instructions: "You are a friendly assistant."
-                    })
-                });
-                if (!resp.ok) {
-                    const t = await resp.text();
-                    alert("Fehler bei Session-Erstellung: " + t);
-                    return;
-                }
-                const data = await resp.json();
-                ephemeralKey = data.client_secret.value;
-                sessionId = data.id;
-
-                // 2) Connect via WebSocket using ephemeral key
-                //    Typically you'd connect to wss://api.openai.com/v1/realtime or similar
-                //    (this endpoint may differ; placeholder below)
-                ws = new WebSocket("wss://api.openai.com/v1/realtime", ["Bearer", ephemeralKey]);
-
-                ws.onopen = () => {
-                    console.log("WebSocket connected.");
-                };
-
-                ws.onmessage = (event) => {
-                    const msg = JSON.parse(event.data);
-                    // We'll handle some basic server events:
-                    switch (msg.type) {
-                        case "session.created":
-                            console.log("Session created:", msg.session);
-                            conversationId = null; // reset
-                            break;
-                        case "conversation.created":
-                            conversationId = msg.conversation.id;
-                            console.log("Conversation created:", conversationId);
-                            break;
-                        case "response.text.delta":
-                            // Append partial text
-                            document.getElementById("responseText").textContent += msg.delta;
-                            break;
-                        case "response.text.done":
-                            // Final chunk of text
-                            document.getElementById("responseText").textContent += msg.text + "\n";
-                            break;
-                        case "response.audio.delta":
-                            // Stream audio chunk
-                            playPCM16Chunk(msg.delta);
-                            break;
-                        default:
-                            // console.log("Other event: ", msg);
-                            break;
-                    }
-                };
-
-                ws.onerror = (err) => {
-                    console.error("WebSocket error:", err);
-                };
-
-                ws.onclose = () => {
-                    console.log("WebSocket closed.");
-                };
-
-                alert("Session erstellt und WebSocket gestartet!");
-            } catch (e) {
-                alert("Fehler: " + e.message);
+            // Construct the subprotocols array
+            const protocols = [
+                "realtime",
+                "openai-insecure-api-key." + OPENAI_API_KEY,
+                "openai-beta.realtime-v1"
+            ];
+            // Append optional org and project if vorhanden
+            if (OPENAI_ORG_ID) {
+                protocols.push("openai-organization." + OPENAI_ORG_ID);
             }
+            if (OPENAI_PROJECT_ID) {
+                protocols.push("openai-project." + OPENAI_PROJECT_ID);
+            }
+
+            // Connect with the given snippet
+            ws = new WebSocket(
+                "wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17",
+                protocols
+            );
+
+            ws.onopen = () => {
+                console.log("Connected to server.");
+                alert("WebSocket Verbindung hergestellt!");
+            };
+
+            ws.onmessage = (event) => {
+                // Just log the raw event for demo
+                console.log("Message from server:", event.data);
+
+                // If you'd like to handle text deltas, parse & check event type
+                const msg = JSON.parse(event.data);
+                if (msg.type === "response.text.delta") {
+                    document.getElementById("responseText").textContent += msg.delta;
+                } else if (msg.type === "response.text.done") {
+                    document.getElementById("responseText").textContent += msg.text + "\n";
+                }
+                // ...handle other events as needed...
+            };
+
+            ws.onerror = (err) => {
+                console.error("WebSocket error:", err);
+                alert("Fehler bei der WebSocket-Verbindung (siehe Konsole).");
+            };
+
+            ws.onclose = () => {
+                console.log("WebSocket closed.");
+                alert("WebSocket Verbindung geschlossen!");
+            };
         };
 
-        document.getElementById('sendBtn').onclick = () => {
+        // Send a simple user message and request a response
+        document.getElementById("sendBtn").onclick = () => {
             if (!ws || ws.readyState !== WebSocket.OPEN) {
                 alert("WebSocket nicht verbunden!");
                 return;
@@ -161,8 +107,7 @@
             // Clear displayed text
             document.getElementById("responseText").textContent = "";
 
-            // We send a user message into the conversation and then create a response
-            // 1) conversation.item.create
+            // 1) Create a user message in the conversation
             const userMsgId = "msg_" + Date.now();
             const createItemEvent = {
                 event_id: "event_" + Date.now(),
@@ -182,14 +127,14 @@
             };
             ws.send(JSON.stringify(createItemEvent));
 
-            // 2) response.create => ask model to respond
+            // 2) Ask the model to respond
             const createResponseEvent = {
                 event_id: "event_" + (Date.now() + 1),
                 type: "response.create",
                 response: {
-                    modalities: ["text", "audio"],
-                    instructions: "Bitte antworte so hilfreich wie möglich.",
-                    // Optionally override other parameters
+                    modalities: ["text"], // just text for simplicity
+                    instructions: "Bitte antworte hilfreich und kurz."
+                    // override other parameters as needed
                 }
             };
             ws.send(JSON.stringify(createResponseEvent));
