@@ -916,14 +916,18 @@ async handleTimer(timer) {
     d.sector1Time = 0;
     d.sector2Time = null;
     d.sector3Time = null;
+
+    log(`Timer Sector 1: Driver ${d.num}, Time ${msToString(sectorTime)}`);
   }
   else if (timer.sector === 2) {
     // Check Lane 1
     d.sector2Time = sectorTime;
+    log(`Timer Sector 2: Driver ${d.num}, Time ${msToString(sectorTime)}`);
   }
   else if (timer.sector === 3) {
     // Check Lane 2
     d.sector3Time = sectorTime;
+    log(`Timer Sector 3: Driver ${d.num}, Time ${msToString(sectorTime)}`);
   }
 
   // Optional: auch einzelne Sector-Zeiten speichern
