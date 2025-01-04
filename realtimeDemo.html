@@ -52,48 +52,69 @@
                 this.sessionId = null;
                 this.ws = null;
                 this.instructions = instructions;
+                this.clientSecret = null;
             }
 
             async initializeSession() {
-                const response = await fetch('https://api.openai.com/v1/realtime/sessions', {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${this.apiKey}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        model: "gpt-4o-realtime-preview-2024-12-17",
-                        modalities: ["audio", "text"],
-                        instructions: this.instructions,
-                        voice: "alloy"
-                    })
-                });
+                try {
+                    const response = await fetch('https://api.openai.com/v1/realtime/sessions', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${this.apiKey}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            model: "gpt-4o-realtime-preview-2024-12-17",
+                            modalities: ["audio", "text"],
+                            instructions: this.instructions,
+                            voice: "alloy"
+                        })
+                    });
 
-                const data = await response.json();
-                this.sessionId = data.id;
-                this.clientSecret = data.client_secret.value;
-                this.ws = new WebSocket(`wss://api.openai.com/v1/realtime/sessions/${this.sessionId}/stream?client_secret=${this.clientSecret}`);
-
-                this.ws.onopen = () => {
-                    console.log('WebSocket verbunden');
-                    alert('Session erfolgreich initialisiert!');
-                };
-
-                this.ws.onmessage = (event) => {
-                    const message = JSON.parse(event.data);
-                    if (message.type === 'response.done') {
-                        this.playAudio(message.response.output[0].content[0].audio);
+                    const data = await response.json();
+                    console.log('data', data);
+                    console.log('response', response);
+                    if (!response.ok) {
+                        console.error('Session konnte nicht erstellt werden:', data);
+                        alert('Fehler bei der Session-Erstellung: ' + data.message);
+                        return;
                     }
-                };
 
-                this.ws.onerror = (error) => {
-                    console.error('WebSocket Fehler:', error);
-                    alert('WebSocket-Verbindung fehlgeschlagen');
-                };
+                    this.sessionId = data.id;
+                    this.clientSecret = data.client_secret.value;
+                    const wsUrl = `wss://realtime-api.openai.com/v1/realtime/sessions/${this.sessionId}/stream?client_secret=${this.clientSecret}`;
+                    console.log('WebSocket URL:', wsUrl);
 
-                this.ws.onclose = () => {
-                    console.log('WebSocket getrennt');
-                };
+                    this.ws = new WebSocket(wsUrl);
+
+                    this.ws.onopen = () => {
+                        console.log('WebSocket verbunden');
+                        alert('Session erfolgreich initialisiert!');
+                    };
+
+                    this.ws.onmessage = (event) => {
+                        const message = JSON.parse(event.data);
+                        console.log('Nachricht erhalten:', message);
+
+                        if (message.type === 'response.done' && message.response.output[0].content[0].audio) {
+                            this.playAudio(message.response.output[0].content[0].audio);
+                        }
+                    };
+
+                    this.ws.onerror = () => {
+                        console.error('WebSocket-Fehler.');
+                        this.ws.close();
+                    };
+
+
+
+                    this.ws.onclose = () => {
+                        console.log('WebSocket getrennt');
+                    };
+                } catch (error) {
+                    console.error('Fehler bei der Initialisierung:', error);
+                    alert('Fehler beim Starten der Session');
+                }
             }
 
             sendText(text) {
@@ -119,6 +140,7 @@
                     }
                 };
 
+                console.log('Text gesendet:', message);
                 this.ws.send(JSON.stringify(message));
             }
 
