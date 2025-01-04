@@ -3,11 +3,11 @@
 
 <head>
     <meta charset="utf-8" />
-    <title>OpenAI Realtime WebSocket Demo</title>
+    <title>OpenAI Realtime Audio Demo</title>
 </head>
 
 <body>
-    <h1>OpenAI Realtime WebSocket Demo</h1>
+    <h1>OpenAI Realtime Audio Demo</h1>
 
     <label for="apiKey">API Key:</label>
     <input type="text" id="apiKey" placeholder="OPENAI_API_KEY" /><br><br>
@@ -25,14 +25,41 @@
     <input type="text" id="userText" placeholder="Dein Text..." />
     <button id="sendBtn">Senden</button>
 
-    <h3>Antwort (Text):</h3>
-    <div id="responseText"></div>
-
     <script>
         // comments in English
         let ws = null;
 
-        // Simple connect using the snippet from your request
+        // Audio context to play PCM16 data
+        const audioContext = new AudioContext({ sampleRate: 16000 });
+
+        // Helper function to convert base64 PCM16 -> AudioBuffer -> play
+        async function playPCM16Chunk(base64Chunk) {
+            const binaryString = atob(base64Chunk);
+            const len = binaryString.length;
+            const buffer16 = new Int16Array(len / 2);
+
+            for (let i = 0; i < len; i += 2) {
+                const lower = binaryString.charCodeAt(i);
+                const higher = binaryString.charCodeAt(i + 1);
+                const value = (higher << 8) | lower;
+                buffer16[i / 2] = value < 32768 ? value : value - 65536;
+            }
+
+            const float32 = new Float32Array(buffer16.length);
+            for (let i = 0; i < buffer16.length; i++) {
+                float32[i] = buffer16[i] / 32768;
+            }
+
+            const audioBuffer = audioContext.createBuffer(1, float32.length, 16000);
+            audioBuffer.copyToChannel(float32, 0);
+
+            const source = audioContext.createBufferSource();
+            source.buffer = audioBuffer;
+            source.connect(audioContext.destination);
+            source.start();
+        }
+
+        // Connect to OpenAI Realtime WebSocket
         document.getElementById("connectBtn").onclick = () => {
             const OPENAI_API_KEY = document.getElementById("apiKey").value.trim();
             const OPENAI_ORG_ID = document.getElementById("orgId").value.trim();
@@ -43,13 +70,11 @@
                 return;
             }
 
-            // Construct the subprotocols array
             const protocols = [
                 "realtime",
                 "openai-insecure-api-key." + OPENAI_API_KEY,
                 "openai-beta.realtime-v1"
             ];
-            // Append optional org and project if vorhanden
             if (OPENAI_ORG_ID) {
                 protocols.push("openai-organization." + OPENAI_ORG_ID);
             }
@@ -57,7 +82,6 @@
                 protocols.push("openai-project." + OPENAI_PROJECT_ID);
             }
 
-            // Connect with the given snippet
             ws = new WebSocket(
                 "wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17",
                 protocols
@@ -69,17 +93,11 @@
             };
 
             ws.onmessage = (event) => {
-                // Just log the raw event for demo
-                console.log("Message from server:", event.data);
-
-                // If you'd like to handle text deltas, parse & check event type
                 const msg = JSON.parse(event.data);
-                if (msg.type === "response.text.delta") {
-                    document.getElementById("responseText").textContent += msg.delta;
-                } else if (msg.type === "response.text.done") {
-                    document.getElementById("responseText").textContent += msg.text + "\n";
+                // Only handle audio streaming
+                if (msg.type === "response.audio.delta") {
+                    playPCM16Chunk(msg.delta);
                 }
-                // ...handle other events as needed...
             };
 
             ws.onerror = (err) => {
@@ -93,7 +111,7 @@
             };
         };
 
-        // Send a simple user message and request a response
+        // Send a simple user message and request an audio response
         document.getElementById("sendBtn").onclick = () => {
             if (!ws || ws.readyState !== WebSocket.OPEN) {
                 alert("WebSocket nicht verbunden!");
@@ -104,10 +122,8 @@
                 alert("Bitte Text eingeben!");
                 return;
             }
-            // Clear displayed text
-            document.getElementById("responseText").textContent = "";
 
-            // 1) Create a user message in the conversation
+            // conversation.item.create
             const userMsgId = "msg_" + Date.now();
             const createItemEvent = {
                 event_id: "event_" + Date.now(),
@@ -127,14 +143,13 @@
             };
             ws.send(JSON.stringify(createItemEvent));
 
-            // 2) Ask the model to respond
+            // response.create: request audio
             const createResponseEvent = {
                 event_id: "event_" + (Date.now() + 1),
                 type: "response.create",
                 response: {
-                    modalities: ["text"], // just text for simplicity
-                    instructions: "Bitte antworte hilfreich und kurz."
-                    // override other parameters as needed
+                    modalities: ["audio"],
+                    instructions: "Bitte nur als Audio antworten."
                 }
             };
             ws.send(JSON.stringify(createResponseEvent));
