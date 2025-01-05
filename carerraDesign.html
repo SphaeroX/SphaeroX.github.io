@@ -20,7 +20,7 @@
                 <v-row>
                     <v-col>
                         <v-card>
-                            <v-card-text class="text-h6 text-center">
+                            <v-card-text class="text-h6 text-center" :class="{ 'blink-bg': blinkActive }">
                                 {{ aktuellesEvent }}
                             </v-card-text>
                         </v-card>
@@ -95,15 +95,15 @@
                     </v-col>
                 </v-row>
 
-                <!-- Fahrerübersicht mit Sparklines als Karten -->
+                <!-- Fahrerübersicht mit Sparklines -->
                 <v-row>
-                    <v-col>
-                        <v-card class="pa-4 mb-5" v-for="(fahrer, index) in fahrerdaten" :key="index" cols="12" md="6"
-                            lg="4">
+                    <v-col v-for="(fahrer, index) in fahrerdaten" :key="index" cols="12" md="6" lg="4">
+                        <v-card class="mb-5 text-center">
                             <v-card-title>{{ fahrer.fahrer }}</v-card-title>
-                            <v-sparkline :model-value="fahrer.rundenverlauf" line-width="2" type="trend" smooth="10"
-                                :gradient="gradient" :gradient-direction="gradientDirection" auto-draw></v-sparkline>
-                            <v-card-subtitle>Verlauf der letzten Runden</v-card-subtitle>
+                            <v-card-text><v-sparkline :model-value="fahrer.rundenverlauf" line-width="1" type="trend"
+                                    :labels="fahrer.rundenverlauf" :smooth="2" max="60" :gradient="gradient"
+                                    :gradient-direction="gradientDirection" auto-draw></v-sparkline></v-card-text>
+
                         </v-card>
                     </v-col>
                 </v-row>
@@ -133,7 +133,8 @@
         createApp({
             data() {
                 return {
-                    aktuellesEvent: 'Neue Beszeit von Manuel',
+                    blinkActive: false,
+                    aktuellesEvent: 'Aktuelles Event',
                     fahrerfarben: ['#f72047', '#ffd200', '#1feaea', '#a020f0', '#ff6347', '#4682b4', '#32cd32', '#ff69b4'],
                     gradientDirection: 'top',
                     gradient: ['#f72047', '#ffd200', '#1feaea'],
@@ -184,7 +185,7 @@
                             aktuelle_runde: 13.10,
                             beste_sektor: 3.20,
                             runden: 22,
-                            rundenverlauf: [13.5, 13.3, 13.2, 13.1, 13.02]
+                            rundenverlauf: [13.5, 13.3, 23.2, 13.1, 13.02]
                         },
                         {
                             fahrer: 'Christof',
@@ -217,6 +218,15 @@
                 fahrerFarbe(index) {
                     return this.fahrerfarben[index % this.fahrerfarben.length];
                 }
+            },
+            mounted() {
+                setInterval(() => {
+                    this.blinkActive = true;
+                    setTimeout(() => {
+                        this.blinkActive = false;
+                    }, 2000);
+                }, 5000);
+
             }
         }).use(vuetify).mount('#app');
     </script>
@@ -296,6 +306,28 @@
         font-size: 2rem;
         font-weight: bold;
         text-transform: uppercase;
+    }
+
+    @keyframes blink-bg {
+
+        0%,
+
+
+        50% {
+            background-color: #f3e412;
+            color: black;
+
+        }
+
+        100% {
+            background-color: transparent;
+            color: white;
+
+        }
+    }
+
+    .blink-bg {
+        animation: blink-bg 0.5s ease-in-out infinite;
     }
 </style>
 
