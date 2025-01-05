@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Carrera Bahn Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/@mdi/font/css/materialdesignicons.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/vuetify@3.7.6/dist/vuetify.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/vue@3.3.10/dist/vue.global.prod.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vuetify@3.7.6/dist/vuetify.min.js"></script>
+</head>
+
+<body>
+
+    <div id="app">
+        <v-app>
+            <v-container>
+                <v-row>
+                    <v-col cols="12">
+                        <v-card class="pa-4">
+                            <v-card-title class="text-h4">Carrera Bahn Übersicht</v-card-title>
+                            <v-card-subtitle>Live-Statistiken und Kontrolle</v-card-subtitle>
+                        </v-card>
+                    </v-col>
+                </v-row>
+
+                <!-- Top 5 Rundenzeiten -->
+                <v-row>
+                    <v-col cols="6">
+                        <v-card>
+                            <v-card-title class="text-h5">Top 5 Rundenzeiten</v-card-title>
+                            <v-list>
+                                <v-list-item v-for="(time, index) in top5Rundenzeiten" :key="index">
+                                    <v-list-item-content>
+                                        <v-list-item-title>
+                                            {{ index + 1 }}. {{ time.fahrer }} - {{ time.zeit }}s
+                                        </v-list-item-title>
+                                        <v-list-item-subtitle>
+                                            Fahrer ID: {{ time.id }}
+                                        </v-list-item-subtitle>
+                                    </v-list-item-content>
+                                </v-list-item>
+                            </v-list>
+                        </v-card>
+                    </v-col>
+
+                    <!-- Top 5 Sektorzeiten -->
+                    <v-col cols="6">
+                        <v-card>
+                            <v-card-title class="text-h5">Top 5 Sektorzeiten</v-card-title>
+                            <v-list>
+                                <v-list-item v-for="(sektor, index) in top5Sektoren" :key="index">
+                                    <v-list-item-content>
+                                        <v-list-item-title>
+                                            {{ index + 1 }}. {{ sektor.fahrer }} - {{ sektor.sektorzeit }}s
+                                        </v-list-item-title>
+                                        <v-list-item-subtitle>
+                                            Fahrer ID: {{ sektor.id }}
+                                        </v-list-item-subtitle>
+                                    </v-list-item-content>
+                                </v-list-item>
+                            </v-list>
+                        </v-card>
+                    </v-col>
+                </v-row>
+
+                <!-- Top 10 All-About-Zeiten -->
+                <v-row>
+                    <v-col cols="12">
+                        <v-card>
+                            <v-card-title class="text-h5">Top 10 All-About-Zeiten</v-card-title>
+                            <v-list>
+                                <v-list-item v-for="(best, index) in top10AllAbout" :key="index">
+                                    <v-list-item-content>
+                                        <v-list-item-title>
+                                            {{ index + 1 }}. {{ best.fahrer }} - {{ best.zeit }}s
+                                        </v-list-item-title>
+                                        <v-list-item-subtitle>
+                                            Fahrer ID: {{ best.id }}
+                                        </v-list-item-subtitle>
+                                    </v-list-item-content>
+                                </v-list-item>
+                            </v-list>
+                        </v-card>
+                    </v-col>
+                </v-row>
+
+                <!-- Fahrer Übersicht -->
+                <v-row>
+                    <v-col cols="12">
+                        <v-card>
+                            <v-card-title class="text-h5">Fahrerübersicht</v-card-title>
+                            <v-data-table :headers="fahrerdatenHeaders" :items="fahrerdaten" class="elevation-1">
+                            </v-data-table>
+                        </v-card>
+                    </v-col>
+                </v-row>
+
+                <!-- Control Panel -->
+                <v-row>
+                    <v-col cols="12">
+                        <v-card class="pa-4">
+                            <v-card-title class="text-h5">Control Panel</v-card-title>
+                            <v-btn class="ma-2" color="primary" @click="startRace">Verbinden</v-btn>
+                            <v-btn class="ma-2" color="primary" @click="startRace">Rennen starten</v-btn>
+                            <v-btn class="ma-2" color="error" @click="stopRace">Rennen stoppen</v-btn>
+                            <v-btn class="ma-2" color="success" @click="resetTrack">Strecke zurücksetzen</v-btn>
+                        </v-card>
+                    </v-col>
+                </v-row>
+            </v-container>
+        </v-app>
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+        const { createVuetify } = Vuetify;
+
+        const vuetify = createVuetify();
+
+        createApp({
+            data() {
+                return {
+                    top5Rundenzeiten: [
+                        { fahrer: 'Manuel', id: 1, zeit: 12.43 },
+                        { fahrer: 'Christof', id: 2, zeit: 12.76 },
+                        { fahrer: 'Matthias', id: 3, zeit: 12.85 },
+                        { fahrer: 'Mara', id: 4, zeit: 13.02 },
+                        { fahrer: 'Luca', id: 5, zeit: 13.20 }
+                    ],
+                    top5Sektoren: [
+                        { fahrer: 'Mara', id: 4, sektorzeit: 3.20 },
+                        { fahrer: 'Matthias', id: 3, sektorzeit: 3.25 },
+                        { fahrer: 'Christof', id: 2, sektorzeit: 3.30 },
+                        { fahrer: 'Manuel', id: 1, sektorzeit: 3.35 },
+                        { fahrer: 'Luca', id: 5, sektorzeit: 3.40 }
+                    ],
+                    top10AllAbout: [
+                        { fahrer: 'Manuel', id: 1, zeit: 12.43 },
+                        { fahrer: 'Christof', id: 2, zeit: 12.76 },
+                        { fahrer: 'Matthias', id: 3, zeit: 12.85 }
+                    ],
+                    fahrerdatenHeaders: [
+                        { text: 'Fahrer', value: 'fahrer' },
+                        { text: 'ID', value: 'id' },
+                        { text: 'Beste Runde', value: 'beste_runde' },
+                        { text: 'Aktuelle Runde', value: 'aktuelle_runde' },
+                        { text: 'Beste Sektorzeit', value: 'beste_sektor' },
+                        { text: 'Rundenanzahl', value: 'runden' }
+                    ],
+                    fahrerdaten: [
+                        { fahrer: 'Manuel', id: 1, beste_runde: 12.43, aktuelle_runde: 12.60, beste_sektor: 3.35, runden: 25 },
+                        { fahrer: 'Mara', id: 4, beste_runde: 13.02, aktuelle_runde: 13.10, beste_sektor: 3.20, runden: 22 }
+                    ]
+                };
+            },
+            methods: {
+                startRace() {
+                    alert('Rennen gestartet!');
+                },
+                stopRace() {
+                    alert('Rennen gestoppt!');
+                },
+                resetTrack() {
+                    alert('Strecke zurückgesetzt!');
+                }
+            }
+        }).use(vuetify).mount('#app');
+    </script>
+
+</body>
+
+</html>
