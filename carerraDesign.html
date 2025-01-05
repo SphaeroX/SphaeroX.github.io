@@ -98,7 +98,7 @@
                 <!-- Fahrerübersicht mit Sparklines als Karten -->
                 <v-row>
                     <v-col>
-                        <v-card class="pa-4 ma-5" v-for="(fahrer, index) in fahrerdaten" :key="index" cols="12" md="6"
+                        <v-card class="pa-4 mb-5" v-for="(fahrer, index) in fahrerdaten" :key="index" cols="12" md="6"
                             lg="4">
                             <v-card-title>{{ fahrer.fahrer }}</v-card-title>
                             <v-sparkline :model-value="fahrer.rundenverlauf" line-width="2" type="trend" smooth="10"
@@ -110,7 +110,7 @@
 
                 <!-- Control Panel -->
                 <v-row>
-                    <v-col cols="12">
+                    <v-col cols="12" class="text-center">
                         <v-card class="pa-4">
                             <v-btn class="ma-2" color="primary" @click="startRace">Rennen starten</v-btn>
                             <v-btn class="ma-2" color="error" @click="stopRace">Rennen stoppen</v-btn>
@@ -253,6 +253,7 @@
         text-transform: uppercase;
         font-weight: bold;
         letter-spacing: 1px;
+        width: 100%;
     }
 
     .v-btn.primary {
