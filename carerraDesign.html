@@ -100,9 +100,9 @@
 
                 <!-- Fahrerübersicht mit Sparklines als Karten -->
                 <v-row>
-                    <v-col v-for="(fahrer, index) in fahrerdaten" :key="index" cols="12" md="6" lg="4">
-                        <v-card-title class="text-h5">Fahrer Rundenverlauf</v-card-title>
+                    <v-card-title class="text-h5">Fahrer Rundenverlauf</v-card-title>
 
+                    <v-col v-for="(fahrer, index) in fahrerdaten" :key="index" cols="12" md="6" lg="4">
                         <v-card class="pa-4">
                             <v-card-title>{{ fahrer.fahrer }}</v-card-title>
                             <v-sparkline :model-value="fahrer.rundenverlauf" line-width="2" type="trend" smooth="10"
