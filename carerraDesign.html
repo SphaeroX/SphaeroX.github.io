@@ -32,7 +32,7 @@
                 <v-row>
                     <v-col cols="12">
                         <v-card>
-                            <v-card-title class="text-h5">Top 5 Rundenzeiten</v-card-title>
+                            <v-card-title>Top 5 Rundenzeiten</v-card-title>
                             <v-list>
                                 <v-list-item v-for="(time, index) in top5Rundenzeiten" :key="index">
                                     <v-list-item-content>
@@ -54,7 +54,7 @@
                     <!-- Top 5 Sektorzeiten -->
                     <v-col cols="12">
                         <v-card>
-                            <v-card-title class="text-h5">Top 5 Sektorzeiten</v-card-title>
+                            <v-card-title>Top 5 Sektorzeiten</v-card-title>
                             <v-list>
                                 <v-list-item v-for="(sektor, index) in top5Sektoren" :key="index">
                                     <v-list-item-content>
@@ -78,7 +78,7 @@
                 <v-row>
                     <v-col cols="12">
                         <v-card>
-                            <v-card-title class="text-h5">Top 10 All-About-Zeiten</v-card-title>
+                            <v-card-title>Top 10 All-About-Zeiten</v-card-title>
                             <v-list>
                                 <v-list-item v-for="(best, index) in top10AllAbout" :key="index">
                                     <v-list-item-content>
@@ -112,11 +112,28 @@
                 <v-row>
                     <v-col cols="12" class="text-center">
                         <v-card class="pa-4">
-                            <v-btn class="ma-2" color="primary" @click="startRace">Rennen starten</v-btn>
-                            <v-btn class="ma-2" color="error" @click="stopRace">Rennen stoppen</v-btn>
-                            <v-btn class="ma-2" color="success" @click="resetTrack">Strecke zurücksetzen</v-btn>
-                            <v-btn class="ma-2" color="warning" @click="resetSession">Session zurücksetzen</v-btn>
-                            <v-btn class="ma-2" color="info" @click="connect">Verbindung aufbauen</v-btn>
+                            <v-btn class="my-1" color="primary" @click="startRace">Rennen starten</v-btn>
+                            <v-btn class="my-1" color="error" @click="stopRace">Rennen stoppen</v-btn>
+                            <v-btn class="my-1" color="success" @click="resetTrack">Strecke zurücksetzen</v-btn>
+                            <v-btn class="my-1" color="warning" @click="resetSession">Session zurücksetzen</v-btn>
+                            <v-btn class="my-1" color="info" @click="connect">Verbindung aufbauen</v-btn>
+                        </v-card>
+                    </v-col>
+                </v-row>
+
+                <!-- Fahrer Zuordnung  -->
+                <v-row>
+                    <v-col cols="12">
+                        <v-card>
+                            <v-card-title>Fahrer Registrierung</v-card-title>
+                            <v-card-text class="py-4">
+                                <v-row>
+                                    <v-col v-for="id in 8" :key="id" cols="12" md="6" lg="3">
+                                        <v-autocomplete :label="'ID ' + id + ' - Fahrername'"
+                                            :items="['Mara', 'Alicia', 'Matze', 'Christof', 'Manuel', 'Janina']"></v-autocomplete>
+                                    </v-col>
+                                </v-row>
+                            </v-card-text>
                         </v-card>
                     </v-col>
                 </v-row>
