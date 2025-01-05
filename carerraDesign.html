@@ -12,7 +12,6 @@
 </head>
 
 <body>
-
     <div id="app">
         <v-app class="app">
             <v-container>
@@ -60,8 +59,9 @@
                                     <v-list-item-content>
                                         <v-list-item-title>
                                             {{ index + 1 }}.
-                                            <span :style="{ color: fahrerFarbe(sektor.id), fontWeight: 'bold' }">{{
-                                                sektor.fahrer }}</span>
+                                            <span :style="{ color: fahrerFarbe(sektor.id), fontWeight: 'bold' }">
+                                                {{ sektor.fahrer }}
+                                            </span>
                                             - {{ sektor.sektorzeit }}s
                                         </v-list-item-title>
                                         <v-list-item-subtitle>
@@ -100,9 +100,11 @@
                     <v-col v-for="(fahrer, index) in fahrerdaten" :key="index" cols="12" md="6" lg="4">
                         <v-card class="mb-5 text-center">
                             <v-card-title>{{ fahrer.fahrer }}</v-card-title>
-                            <v-card-text><v-sparkline :model-value="fahrer.rundenverlauf" line-width="1" type="trend"
+                            <v-card-text class="pt-4">
+                                <v-sparkline :model-value="fahrer.rundenverlauf" line-width="1" type="trend"
                                     :labels="fahrer.rundenverlauf" :smooth="2" :gradient="gradient"
-                                    :gradient-direction="gradientDirection" auto-draw></v-sparkline></v-card-text>
+                                    :gradient-direction="gradientDirection" auto-draw></v-sparkline>
+                            </v-card-text>
 
                         </v-card>
                     </v-col>
@@ -111,12 +113,15 @@
                 <!-- Control Panel -->
                 <v-row>
                     <v-col cols="12" class="text-center">
-                        <v-card class="pa-4">
-                            <v-btn class="my-1" color="primary" @click="startRace">Rennen starten</v-btn>
-                            <v-btn class="my-1" color="error" @click="stopRace">Rennen stoppen</v-btn>
-                            <v-btn class="my-1" color="success" @click="resetTrack">Strecke zurücksetzen</v-btn>
-                            <v-btn class="my-1" color="warning" @click="resetSession">Session zurücksetzen</v-btn>
-                            <v-btn class="my-1" color="info" @click="connect">Verbindung aufbauen</v-btn>
+                        <v-card>
+                            <v-card-title>Steuerung</v-card-title>
+                            <v-card-text class="pt-4">
+                                <v-btn class="my-1" color="primary" @click="startRace">Enter / Rennstart</v-btn>
+                                <v-btn class="my-1" color="error" @click="stopRace">Rennen stoppen</v-btn>
+                                <v-btn class="my-1" color="success" @click="resetTrack">Strecke zurücksetzen</v-btn>
+                                <v-btn class="my-1" color="warning" @click="resetSession">Session zurücksetzen</v-btn>
+                                <v-btn class="my-1" color="info" @click="connect">Verbindung aufbauen</v-btn>
+                            </v-card-text>
                         </v-card>
                     </v-col>
                 </v-row>
@@ -126,9 +131,9 @@
                     <v-col cols="12">
                         <v-card>
                             <v-card-title>Fahrer Registrierung</v-card-title>
-                            <v-card-text class="py-4">
-                                <v-row>
-                                    <v-col v-for="id in 8" :key="id" cols="12" md="6" lg="3">
+                            <v-card-text>
+                                <v-row class="pt-8">
+                                    <v-col v-for="id in 8" :key="id" cols="12" md="6" lg="3" class="ma-0 py-0">
                                         <v-autocomplete :label="'ID ' + id + ' - Fahrername'"
                                             :items="['Mara', 'Alicia', 'Matze', 'Christof', 'Manuel', 'Janina']"></v-autocomplete>
                                     </v-col>
