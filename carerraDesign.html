@@ -14,17 +14,8 @@
 <body>
 
     <div id="app">
-        <v-app>
+        <v-app class="app">
             <v-container>
-                <v-row>
-                    <v-col cols="12">
-                        <v-card class="pa-4">
-                            <v-card-title class="text-h4">Carrera Bahn Übersicht</v-card-title>
-                            <v-card-subtitle>Live-Statistiken und Kontrolle</v-card-subtitle>
-                        </v-card>
-                    </v-col>
-                </v-row>
-
                 <!-- Event-Anzeige -->
                 <v-row>
                     <v-col>
@@ -46,7 +37,10 @@
                                 <v-list-item v-for="(time, index) in top5Rundenzeiten" :key="index">
                                     <v-list-item-content>
                                         <v-list-item-title>
-                                            {{ index + 1 }}. {{ time.fahrer }} - {{ time.zeit }}s
+                                            {{ index + 1 }}.
+                                            <span :style="{ color: fahrerFarbe(time.id), fontWeight: 'bold' }">{{
+                                                time.fahrer }}</span>
+                                            - {{ time.zeit }}s
                                         </v-list-item-title>
                                         <v-list-item-subtitle>
                                             Fahrer ID: {{ time.id }}
@@ -65,7 +59,10 @@
                                 <v-list-item v-for="(sektor, index) in top5Sektoren" :key="index">
                                     <v-list-item-content>
                                         <v-list-item-title>
-                                            {{ index + 1 }}. {{ sektor.fahrer }} - {{ sektor.sektorzeit }}s
+                                            {{ index + 1 }}.
+                                            <span :style="{ color: fahrerFarbe(sektor.id), fontWeight: 'bold' }">{{
+                                                sektor.fahrer }}</span>
+                                            - {{ sektor.sektorzeit }}s
                                         </v-list-item-title>
                                         <v-list-item-subtitle>
                                             Fahrer ID: {{ sektor.id }}
@@ -100,16 +97,14 @@
 
                 <!-- Fahrerübersicht mit Sparklines als Karten -->
                 <v-row>
-                    <v-card-title class="text-h5">Fahrer Rundenverlauf</v-card-title>
-
-                    <v-col v-for="(fahrer, index) in fahrerdaten" :key="index" cols="12" md="6" lg="4">
-                        <v-card class="pa-4">
+                    <v-col>
+                        <v-card class="pa-4 ma-5" v-for="(fahrer, index) in fahrerdaten" :key="index" cols="12" md="6"
+                            lg="4">
                             <v-card-title>{{ fahrer.fahrer }}</v-card-title>
                             <v-sparkline :model-value="fahrer.rundenverlauf" line-width="2" type="trend" smooth="10"
                                 :gradient="gradient" :gradient-direction="gradientDirection" auto-draw></v-sparkline>
                             <v-card-subtitle>Verlauf der letzten Runden</v-card-subtitle>
                         </v-card>
-
                     </v-col>
                 </v-row>
 
@@ -117,7 +112,6 @@
                 <v-row>
                     <v-col cols="12">
                         <v-card class="pa-4">
-                            <v-card-title class="text-h5">Control Panel</v-card-title>
                             <v-btn class="ma-2" color="primary" @click="startRace">Rennen starten</v-btn>
                             <v-btn class="ma-2" color="error" @click="stopRace">Rennen stoppen</v-btn>
                             <v-btn class="ma-2" color="success" @click="resetTrack">Strecke zurücksetzen</v-btn>
@@ -140,7 +134,7 @@
             data() {
                 return {
                     aktuellesEvent: 'Neue Beszeit von Manuel',
-
+                    fahrerfarben: ['#f72047', '#ffd200', '#1feaea', '#a020f0', '#ff6347', '#4682b4', '#32cd32', '#ff69b4'],
                     gradientDirection: 'top',
                     gradient: ['#f72047', '#ffd200', '#1feaea'],
                     top5Rundenzeiten: [
@@ -219,11 +213,90 @@
                 },
                 connect() {
                     alert('Verbindung aufgebaut!');
+                },
+                fahrerFarbe(index) {
+                    return this.fahrerfarben[index % this.fahrerfarben.length];
                 }
             }
         }).use(vuetify).mount('#app');
     </script>
 
 </body>
+
+<style>
+    .app {
+        background-color: #1a1a1a;
+        /* Dunkler Asphalt-Hintergrund */
+        color: white;
+        font-family: 'Arial', sans-serif;
+    }
+
+    .v-card {
+        background-color: #2c2c2c;
+        /* Dunklere Karten für Kontrast */
+        border-radius: 12px;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.7);
+    }
+
+    .v-card-title {
+        color: white;
+        background-color: #d52b1e;
+    }
+
+    .v-card-subtitle,
+    .v-card-text {
+        color: #b0b0b0;
+        /* Leichtes Grau für Untertexte */
+    }
+
+    .v-btn {
+        text-transform: uppercase;
+        font-weight: bold;
+        letter-spacing: 1px;
+    }
+
+    .v-btn.primary {
+        background-color: #d52b1e;
+        /* Carrera Rot für primäre Buttons */
+    }
+
+    .v-btn.error {
+        background-color: #ff3333;
+        /* Stopp-Button in Rot */
+    }
+
+    .v-btn.success {
+        background-color: #2ecc71;
+        /* Grün für Bestätigung */
+    }
+
+    .v-btn.warning {
+        background-color: #f39c12;
+        /* Gelb für Warnungen */
+    }
+
+    .v-btn.info {
+        background-color: #3498db;
+        /* Blau für Informationen */
+    }
+
+    .v-sparkline {
+        stroke: #d52b1e;
+        /* Carrera-Rot für die Sparklines */
+    }
+
+    .v-container {
+        margin-top: 20px;
+    }
+
+    .header {
+        text-align: center;
+        margin: 20px 0;
+        font-size: 2rem;
+        font-weight: bold;
+        text-transform: uppercase;
+    }
+</style>
+
 
 </html>
