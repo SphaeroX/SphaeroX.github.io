@@ -101,7 +101,7 @@
                         <v-card class="mb-5 text-center">
                             <v-card-title>{{ fahrer.fahrer }}</v-card-title>
                             <v-card-text><v-sparkline :model-value="fahrer.rundenverlauf" line-width="1" type="trend"
-                                    :labels="fahrer.rundenverlauf" :smooth="2" max="60" :gradient="gradient"
+                                    :labels="fahrer.rundenverlauf" :smooth="2" :gradient="gradient"
                                     :gradient-direction="gradientDirection" auto-draw></v-sparkline></v-card-text>
 
                         </v-card>
@@ -176,7 +176,7 @@
                             aktuelle_runde: 12.60,
                             beste_sektor: 3.35,
                             runden: 25,
-                            rundenverlauf: [12.9, 12.6, 12.5, 12.4, 12.43]
+                            rundenverlauf: [52.9, 52.6, 52.5, 52.4, 52.43, 52.6, 52.5,]
                         },
                         {
                             fahrer: 'Mara',
@@ -185,7 +185,7 @@
                             aktuelle_runde: 13.10,
                             beste_sektor: 3.20,
                             runden: 22,
-                            rundenverlauf: [13.5, 13.3, 23.2, 13.1, 13.02]
+                            rundenverlauf: [50.5, 110.2, 50.1, 50.02]
                         },
                         {
                             fahrer: 'Christof',
@@ -194,7 +194,7 @@
                             aktuelle_runde: 12.85,
                             beste_sektor: 3.30,
                             runden: 24,
-                            rundenverlauf: [13.0, 12.9, 12.8, 12.7, 12.76]
+                            rundenverlauf: [48.0, 48.9, 48.8, 48.7, 48.76, 48.9, 48.8, 48.7, 48.76]
                         }
                     ]
                 };
@@ -309,7 +309,6 @@
     }
 
     @keyframes blink-bg {
-
         0%,
 
 
