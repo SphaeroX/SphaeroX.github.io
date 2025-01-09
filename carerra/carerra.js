@@ -5,14 +5,13 @@
 
 /**
  * Einfacher Logger, hier nur als console.log.
- * Du kannst diese Funktion anpassen oder ganz entfernen.
  */
 export function log(msg) {
     console.log(msg);
 }
 
 /**
- * Custom-Fehlerklassen
+ * Custom Error-Klassen
  */
 export class ProtocolError extends Error { }
 export class ChecksumError extends Error { }
@@ -21,7 +20,7 @@ export class BufferTooShort extends ConnectionError { }
 export class TimeoutError extends ConnectionError { }
 
 /**
- * Hilfsfunktion für Checksummen
+ * Checksumme für das Protokoll (wie im Python-Code)
  */
 export function chksum(buf, offset = 0, size = null) {
     const n = buf.length;
@@ -87,6 +86,7 @@ export function pack(format, ...args) {
                 break;
             }
             case "B": {
+                // B => 2 nibbles in ASCII
                 let value = nextArg();
                 if (value < 0 || value > 0xff) {
                     throw new Error("'B' format argument out of range");
@@ -99,6 +99,7 @@ export function pack(format, ...args) {
                 break;
             }
             case "Y": {
+                // Y => 1 nibble in ASCII
                 let value = nextArg();
                 if (value < 0 || value > 0xf) {
                     throw new Error("'Y' format argument out of range");
@@ -107,16 +108,45 @@ export function pack(format, ...args) {
                 pushByte(base + value);
                 break;
             }
+            case "r": {
+                // 'r' => raw bytes repeated
+                // Hier in Kurzform: wir lesen, was als nächstes kommt (count) und dann das Argument
+                // (Das volle Parsing wie in Python machen wir hier nicht)
+                let sizeStr = "";
+                let j = i + 1;
+                while (j < format.length && !isNaN(format[j]) && format[j] !== " ") {
+                    sizeStr += format[j];
+                    j++;
+                }
+                let count = sizeStr ? parseInt(sizeStr, 10) : 1;
+                i = j - 1;
+
+                let value = nextArg();
+                if (typeof value === "string") {
+                    for (let k = 0; k < value.length; k++) {
+                        pushByte(value.charCodeAt(k));
+                    }
+                } else if (value instanceof Uint8Array) {
+                    for (let b of value) {
+                        pushByte(b);
+                    }
+                } else if (Array.isArray(value)) {
+                    for (let b of value) {
+                        pushByte(b);
+                    }
+                }
+                break;
+            }
             case "C": {
+                // Checksum
                 let offsetVal = 0;
                 let csum = chksum(buf, offsetVal, buf.length - offsetVal);
                 let base = 48; // '0'
                 pushByte(base + csum);
                 break;
             }
-            // ... ggf. weitere Cases bei Bedarf ...
             default:
-                // Unbekannte oder übersprungene Format-Zeichen ignorieren
+                // Überspringen oder ignorieren
                 break;
         }
         i++;
@@ -125,7 +155,7 @@ export function pack(format, ...args) {
 }
 
 /**
- * Optional: Eine stark vereinfachte Unpack-Funktion, falls benötigt
+ * Minimale Unpack-Funktion (falls benötigt)
  */
 export function unpack(format, buf) {
     let result = [];
@@ -161,15 +191,16 @@ export class BLEConnection {
         this._receiveQueue = [];
         this._notifyCallback = this._notifyCallback.bind(this);
 
-        this.SERVICE_UUID = "39df7777-b1b4-b90b-57f1-7144ae4e4a6a";
-        this.CHAR_OUTPUT_UUID = "39df8888-b1b4-b90b-57f1-7144ae4e4a6a";
-        this.CHAR_NOTIFY_UUID = "39df9999-b1b4-b90b-57f1-7144ae4e4a6a";
+        // UUIDs
+        this.SERVICE_UUID = "39df7777-b1b4-b90b-57f1-7144ae4e4a6a".toLowerCase();
+        this.CHAR_OUTPUT_UUID = "39df8888-b1b4-b90b-57f1-7144ae4e4a6a".toLowerCase();
+        this.CHAR_NOTIFY_UUID = "39df9999-b1b4-b90b-57f1-7144ae4e4a6a".toLowerCase();
 
         this.max_fwu_block_size = 18;
     }
 
     async open() {
-        // Achtung: muss von HTTPS-Seite aus aufgerufen werden
+        // Achtung: Muss https:// sein, damit BLE funktioniert.
         this._device = await navigator.bluetooth.requestDevice({
             filters: [{ name: "Control_Unit" }],
             optionalServices: [this.SERVICE_UUID],
@@ -218,7 +249,7 @@ export class BLEConnection {
         }
         let buf = this._receiveQueue.shift();
 
-        // Workaround: '$'-Handling wie in Python
+        // '$'-Handling wie in ble.py
         if (buf[buf.length - 1] === 0x24) {
             if (buf.length === 6) {
                 let newBuf = new Uint8Array(buf.length);
@@ -256,7 +287,7 @@ export class BLEConnection {
 }
 
 /**
- * Öffnet eine BLE-Verbindung
+ * Funktion, um eine BLE-Verbindung zu öffnen
  */
 export async function openConnection() {
     let conn = new BLEConnection();
@@ -265,7 +296,7 @@ export async function openConnection() {
 }
 
 /**
- * Control Unit (CU) - ahmt diverse Methoden aus Python nach
+ * ControlUnit: Repäsentiert die Carrera CU
  */
 export class ControlUnit {
     constructor(connection) {
@@ -304,6 +335,7 @@ export class ControlUnit {
     }
 
     async press(buttonId) {
+        // cYC => 'T', buttonId => C
         const msg = pack("cYC", "T".charCodeAt(0), buttonId);
         await this.request(msg);
     }
@@ -313,6 +345,7 @@ export class ControlUnit {
     }
 
     async reset() {
+        // cYYC => '=', 1, 0 => C
         const msg = pack("cYYC", "=".charCodeAt(0), 1, 0);
         await this.request(msg);
     }
@@ -322,7 +355,7 @@ export class ControlUnit {
         const res = await this.request(msg);
         if (!res) return null;
 
-        // Falls "?:..." => Status
+        // Falls "?:...", dann "status"
         if (res[0] === "?".charCodeAt(0) && res[1] === ":".charCodeAt(0)) {
             let idx = 2;
             let fuel = [];
@@ -345,8 +378,7 @@ export class ControlUnit {
                 pitmask,
                 display
             };
-        }
-        else if (res[0] === "?".charCodeAt(0)) {
+        } else if (res[0] === "?".charCodeAt(0)) {
             // Timer
             let idx = 1;
             let address = res[idx] & 0x0f;
@@ -380,29 +412,39 @@ export class ControlUnit {
         if (value < 0 || value > 15) throw new Error("Value out of range");
         if (repeat < 1 || repeat > 15) throw new Error("Repeat count out of range");
 
+        // cBYYC => 'J', word|address<<5, value, repeat => C
         let w = (word | (address << 5)) & 0xff;
         const msg = pack("cBYYC", "J".charCodeAt(0), w, value, repeat);
         await this.request(msg);
     }
 
     async setspeed(address, value) {
+        // word=0
         await this.setword(0, address, value, 2);
     }
+
     async setbrake(address, value) {
+        // word=1
         await this.setword(1, address, value, 2);
     }
+
     async setfuel(address, value) {
+        // word=2
         await this.setword(2, address, value, 2);
     }
+
     async clrpos() {
+        // word=6, value=9
         await this.setword(6, 0, 9);
     }
+
     async setpos(address, position) {
         if (position < 1 || position > 8) {
             throw new Error("Position out of range");
         }
         await this.setword(6, address, position);
     }
+
     async setlap(value) {
         if (value < 0 || value > 255) throw new Error("Lap value out of range");
         await this.setlap_hi(value >> 4);
@@ -416,6 +458,7 @@ export class ControlUnit {
     }
 
     async fwu_start() {
+        // ccC => 'G','B' => C
         const msg = pack("ccC", "G".charCodeAt(0), "B".charCodeAt(0));
         await this.request(msg);
     }
@@ -457,13 +500,16 @@ export class Driver {
         this.fuel = 0;
         this.pit = false;
 
-        // Für erweiterte Sektor-Logik
+        // Zusatz für Sektor-Logik
         this.sectorStart = null;
         this.sector1Time = 0;
         this.sector2Time = null;
         this.sector3Time = null;
         this.bestSector2Time = null;
         this.bestSector3Time = null;
+
+        // Für Sparklines
+        this.lapHistory = [];
     }
 
     newLap(timerTimestamp) {
@@ -473,13 +519,15 @@ export class Driver {
                 this.bestlap = this.laptime;
             }
             this.laps++;
+            // Für Sparklines speichern wir mal pauschal die laptime
+            this.lapHistory.push(this.laptime);
         }
         this.time = timerTimestamp;
     }
 }
 
 /**
- * Formatierung Millisekunden -> String
+ * Hilfsfunktion: Millisekunden -> String
  */
 export function msToString(ms) {
     if (ms === null || ms === undefined) return "n/a";
@@ -524,6 +572,7 @@ export class RaceManager {
             d.sector3Time = null;
             d.bestSector2Time = null;
             d.bestSector3Time = null;
+            d.lapHistory = [];
         });
         this.start = null;
         this.maxlaps = 0;
@@ -562,7 +611,7 @@ export class RaceManager {
         d.sectorStart = timer.timestamp;
 
         if (timer.sector === 1) {
-            // Neues Lap
+            // Start/Ziel => neue Runde
             if (d.sector2Time != null && d.sector3Time != null) {
                 d.laptime = d.sector1Time + d.sector2Time + d.sector3Time;
             } else {
@@ -571,7 +620,6 @@ export class RaceManager {
             this.lapTimes.push(d.laptime);
             d.newLap(timer.timestamp);
 
-            // Sektoren zurücksetzen
             d.sector1Time = 0;
             d.sector2Time = null;
             d.sector3Time = null;

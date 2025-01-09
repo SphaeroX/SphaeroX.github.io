@@ -2,14 +2,15 @@
 <html lang="de">
 
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Carrera Bahn Dashboard</title>
-    <!-- Material Design Icons + Vuetify CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/@mdi/font/css/materialdesignicons.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/vuetify@3.7.6/dist/vuetify.min.css" rel="stylesheet">
 
-    <!-- WICHTIG: Wir binden unsere carerra4.js als ES-Modul ein -->
+    <!-- Material Design Icons + Vuetify CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/@mdi/font/css/materialdesignicons.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/vuetify@3.7.6/dist/vuetify.min.css" rel="stylesheet" />
+
+    <!-- Unser Carerra-Code als ES-Modul laden -->
     <script type="module" src="./carerra.js"></script>
 
     <!-- Vue + Vuetify JS -->
@@ -21,8 +22,7 @@
     <div id="app">
         <v-app class="app">
             <v-container>
-
-                <!-- Event-Anzeige (nur Demo, blinkt alle 5s) -->
+                <!-- Event-Anzeige (Blink-Animation) -->
                 <v-row>
                     <v-col>
                         <v-card>
@@ -33,7 +33,48 @@
                     </v-col>
                 </v-row>
 
-                <!-- Top 5 Rundenzeiten & Sektorzeiten (Aus dem RaceManager) -->
+                <!-- Steuer-Buttons (inkl. Speed, Brake, Fuel, Code) -->
+                <v-row>
+                    <v-col cols="12">
+                        <v-card>
+                            <v-card-title>Steuerung</v-card-title>
+                            <v-card-text>
+                                <v-btn class="my-1" color="info" @click="connect">Verbinden (BLE)</v-btn>
+                                <v-btn class="my-1" color="primary" @click="startRace">Start (Enter)</v-btn>
+                                <v-btn class="my-1" color="error" @click="stopRace">Stop</v-btn>
+                                <v-btn class="my-1" color="warning" @click="resetTrack">CU Reset</v-btn>
+                                <v-btn class="my-1" color="success" @click="resetSession">Session zurücksetzen</v-btn>
+                                <v-btn class="my-1" color="secondary" @click="pressPaceCar">Pace Car / ESC</v-btn>
+                                <v-btn class="my-1" color="secondary" @click="pressCode">Code</v-btn>
+                            </v-card-text>
+                            <v-card-subtitle class="ma-2">Schnelleinst. pro Car</v-card-subtitle>
+                            <v-card-text>
+                                <!-- Minimale Demo: Speed/Brake/Fuel als 0-15 Einsteller pro Car -->
+                                <v-row>
+                                    <v-col v-for="car in [1,2,3,4,5,6,7,8]" :key="car" cols="12" md="6" lg="3">
+                                        <v-card flat>
+                                            <v-card-subtitle>
+                                                <strong>Car #{{ car }} / {{ fahrerNameMap[car] || 'Fahrer'+car
+                                                    }}</strong>
+                                            </v-card-subtitle>
+
+                                            <v-text-field v-model="carSpeed[car]" type="number" label="Speed (0-15)"
+                                                min="0" max="15" @change="updateSpeed(car)"></v-text-field>
+
+                                            <v-text-field v-model="carBrake[car]" type="number" label="Brake (0-15)"
+                                                min="0" max="15" @change="updateBrake(car)"></v-text-field>
+
+                                            <v-text-field v-model="carFuel[car]" type="number" label="Fuel (0-15)"
+                                                min="0" max="15" @change="updateFuel(car)"></v-text-field>
+                                        </v-card>
+                                    </v-col>
+                                </v-row>
+                            </v-card-text>
+                        </v-card>
+                    </v-col>
+                </v-row>
+
+                <!-- Top 5 Laps und Sektoren (All-Time) -->
                 <v-row>
                     <v-col cols="12" md="6">
                         <v-card>
@@ -66,55 +107,56 @@
                     </v-col>
                 </v-row>
 
-                <!-- Fahrerübersicht (Aktuelle Session) -->
+                <!-- Tabellen-Ansicht der Fahrer (nur aktuelle Session) -->
                 <v-row>
-                    <v-col cols="12" md="12">
+                    <v-col cols="12">
                         <v-card>
-                            <v-card-title>Aktuelle Session: Fahrer & Zeiten</v-card-title>
+                            <v-card-title>Fahrer Übersicht (Session)</v-card-title>
                             <v-data-table :headers="fahrerdatenHeaders" :items="aktuelleFahrerdaten" disable-pagination
                                 hide-default-footer>
                                 <template #item.fahrer="{ item }">
-                                    <!-- Fahrername aus "fahrerNameMap" -->
                                     <span :style="{ fontWeight: 'bold', color: fahrerFarbe(item.num) }">
                                         {{ fahrerNameMap[item.num] || ('Fahrer ' + item.num) }}
                                     </span>
                                 </template>
-                                <template #item.bestlap="{ item }">
-                                    {{ formatMs(item.bestlap) }}
-                                </template>
                                 <template #item.laptime="{ item }">
                                     {{ formatMs(item.laptime) }}
+                                </template>
+                                <template #item.bestlap="{ item }">
+                                    {{ formatMs(item.bestlap) }}
                                 </template>
                             </v-data-table>
                         </v-card>
                     </v-col>
                 </v-row>
 
-                <!-- Control Panel -->
+                <!-- Sparklines pro Fahrer (Lap-History) -->
                 <v-row>
-                    <v-col cols="12" class="text-center">
-                        <v-card>
-                            <v-card-title>Steuerung</v-card-title>
-                            <v-card-text class="pt-4">
-                                <v-btn class="my-1" color="primary" @click="startRace">Rennstart</v-btn>
-                                <v-btn class="my-1" color="error" @click="stopRace">Stop</v-btn>
-                                <v-btn class="my-1" color="success" @click="resetTrack">Strecke zurücksetzen (CU
-                                    Reset)</v-btn>
-                                <v-btn class="my-1" color="warning" @click="resetSession">Session zurücksetzen</v-btn>
-                                <v-btn class="my-1" color="info" @click="connect">Verbinden (BLE)</v-btn>
+                    <v-col v-for="driver in rms ? rms.drivers : []" :key="driver.num" cols="12" md="6" lg="3">
+                        <v-card class="pa-2 text-center mb-4">
+                            <v-card-title>
+                                Car #{{ driver.num }} – {{ fahrerNameMap[driver.num] || 'Fahrer'+driver.num }}
+                            </v-card-title>
+                            <v-card-subtitle>
+                                <small>Beste Runde: {{ formatMs(driver.bestlap) }}</small>
+                            </v-card-subtitle>
+                            <v-card-text>
+                                <v-sparkline :model-value="driver.lapHistory" line-width="2" :smooth="2"
+                                    :gradient="sparklineGradient" :gradient-direction="gradientDirection"
+                                    auto-draw></v-sparkline>
                             </v-card-text>
                         </v-card>
                     </v-col>
                 </v-row>
 
-                <!-- Fahrer Zuordnung manuell (Pro Car-ID) -->
+                <!-- Fahrer Registrierung -->
                 <v-row>
                     <v-col cols="12">
                         <v-card>
-                            <v-card-title>Fahrer Registrierung / Zuordnung</v-card-title>
+                            <v-card-title>Fahrer Registrierung</v-card-title>
                             <v-card-text>
                                 <v-row>
-                                    <v-col v-for="carId in 8" :key="carId" cols="12" md="4" lg="3">
+                                    <v-col v-for="carId in 8" :key="carId" cols="12" md="6" lg="3">
                                         <v-text-field :label="'Car ' + carId + ' - Fahrername'"
                                             v-model="fahrerNameMap[carId]" @input="saveDriverNames"></v-text-field>
                                     </v-col>
@@ -123,7 +165,6 @@
                         </v-card>
                     </v-col>
                 </v-row>
-
             </v-container>
         </v-app>
     </div>
@@ -135,7 +176,7 @@
             ControlUnit,
             RaceManager,
             msToString,
-            TimeoutError
+            TimeoutError,
         } from "./carerra.js";
 
         const { createApp } = Vue;
@@ -148,7 +189,7 @@
                     blinkActive: false,
                     aktuellesEvent: "Aktuelles Event",
 
-                    // Mapping Car-ID -> Name
+                    // Car => Name
                     fahrerNameMap: {
                         1: "",
                         2: "",
@@ -160,6 +201,11 @@
                         8: "",
                     },
 
+                    // Car => Speed/Brake/Fuel
+                    carSpeed: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0 },
+                    carBrake: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0 },
+                    carFuel: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0 },
+
                     fahrerfarben: [
                         "#f72047",
                         "#ffd200",
@@ -170,43 +216,37 @@
                         "#32cd32",
                         "#ff69b4",
                     ],
+                    gradientDirection: "top",
+                    sparklineGradient: ["#f72047", "#ffd200", "#1feaea"],
 
-                    // DataTable-Header
                     fahrerdatenHeaders: [
                         { text: "Car #", value: "num" },
                         { text: "Fahrer", value: "fahrer" },
-                        { text: "Laps", value: "laps" },
+                        { text: "Runden", value: "laps" },
                         { text: "Letzte Runde", value: "laptime" },
                         { text: "Beste Runde", value: "bestlap" },
                         { text: "Pits", value: "pits" },
                         { text: "Fuel", value: "fuel" },
                     ],
 
-                    // BLE / CU / RMS
                     connection: null,
                     cu: null,
                     rms: null,
+                    pollRunning: false,
 
-                    // Allzeit-Bestzeiten (werden in localStorage gespeichert)
                     allTimeBestLaps: [],
                     allTimeBestSectors: [],
-
-                    pollRunning: false,
                 };
             },
-
             computed: {
-                // Liste der Fahrer (aktuelle Session) vom RaceManager
                 aktuelleFahrerdaten() {
                     if (!this.rms) return [];
-                    // Sortierte Liste
                     return this.rms.getSortedDrivers();
                 },
             },
-
             methods: {
+                // Style-Helfer
                 fahrerFarbe(carNum) {
-                    // Einfache Zuordnung über Index-Offset
                     const idx = (carNum - 1) % this.fahrerfarben.length;
                     return this.fahrerfarben[idx];
                 },
@@ -215,82 +255,76 @@
                     return msToString(ms);
                 },
 
-                /**
-                 * Lädt (falls vorhanden) Fahrer-Namen aus localStorage
-                 */
+                // Driver-Name in localStorage
                 loadDriverNames() {
                     const data = localStorage.getItem("fahrerNameMap");
                     if (data) {
                         try {
                             const parsed = JSON.parse(data);
-                            // Nur Keys 1-8 übernehmen
                             for (let i = 1; i <= 8; i++) {
                                 if (typeof parsed[i] === "string") {
                                     this.fahrerNameMap[i] = parsed[i];
                                 }
                             }
-                        } catch (e) {
-                            console.warn("Fehler beim Laden der Fahrernamen:", e);
+                        } catch (err) {
+                            console.warn("Fehler beim Laden der Fahrernamen:", err);
                         }
                     }
                 },
-
-                /**
-                 * Speichert die Fahrer-Namen in localStorage
-                 */
                 saveDriverNames() {
-                    localStorage.setItem("fahrerNameMap", JSON.stringify(this.fahrerNameMap));
+                    localStorage.setItem(
+                        "fahrerNameMap",
+                        JSON.stringify(this.fahrerNameMap)
+                    );
                 },
 
-                /**
-                 * Lädt Allzeit-Bestzeiten aus localStorage
-                 */
+                // All-Time Best Zeiten
                 loadAllTimeBestTimes() {
                     const laps = localStorage.getItem("allTimeBestLaps");
                     const sectors = localStorage.getItem("allTimeBestSectors");
                     if (laps) {
                         try {
                             this.allTimeBestLaps = JSON.parse(laps);
-                        } catch (e) {
-                            console.warn("Fehler beim Laden der allTimeBestLaps:", e);
+                        } catch (err) {
+                            console.warn("Fehler beim Laden der allTimeBestLaps:", err);
                         }
                     }
                     if (sectors) {
                         try {
                             this.allTimeBestSectors = JSON.parse(sectors);
-                        } catch (e) {
-                            console.warn("Fehler beim Laden der allTimeBestSectors:", e);
+                        } catch (err) {
+                            console.warn("Fehler beim Laden der allTimeBestSectors:", err);
                         }
                     }
                 },
-
-                /**
-                 * Schreibt Allzeit-Bestzeiten in localStorage
-                 */
                 saveAllTimeBestTimes() {
-                    localStorage.setItem("allTimeBestLaps", JSON.stringify(this.allTimeBestLaps));
-                    localStorage.setItem("allTimeBestSectors", JSON.stringify(this.allTimeBestSectors));
+                    localStorage.setItem(
+                        "allTimeBestLaps",
+                        JSON.stringify(this.allTimeBestLaps)
+                    );
+                    localStorage.setItem(
+                        "allTimeBestSectors",
+                        JSON.stringify(this.allTimeBestSectors)
+                    );
                 },
 
-                /**
-                 * Baut eine Verbindung via BLE auf
-                 */
+                // BLE-Verbindung aufbauen
                 async connect() {
                     if (this.connection) {
-                        alert("Bereits verbunden oder noch am Verbinden...");
+                        alert("Bereits verbunden oder am Verbinden...");
                         return;
                     }
                     try {
                         this.connection = await openConnection();
                         this.cu = new ControlUnit(this.connection);
+
                         const version = await this.cu.version();
                         log("CU Version: " + version);
 
-                        // RaceManager anlegen
                         this.rms = new RaceManager(this.cu);
                         await this.rms.resetAll();
 
-                        // Poll starten
+                        // Poll-Loop starten
                         this.startPollLoop();
                         alert("Verbindung erfolgreich aufgebaut!");
                     } catch (err) {
@@ -302,7 +336,6 @@
                 async startPollLoop() {
                     if (this.pollRunning) return;
                     this.pollRunning = true;
-
                     while (this.pollRunning && this.cu) {
                         try {
                             const data = await this.cu.poll();
@@ -313,19 +346,18 @@
                                     await this.rms.handleTimer(data);
                                 }
                             }
-                            // Aktuelle Top5-Laps/Sektors in RMS
+                            // Session-Top5
                             const topLaps = this.rms.getTop5Laps();
                             const topSectors = this.rms.getTop5Sectors();
 
-                            // Allzeit-Bestzeiten ggf. aktualisieren
+                            // All-Time aktualisieren
                             this.updateAllTimeBest(topLaps, topSectors);
 
                         } catch (err) {
                             if (err instanceof TimeoutError) {
-                                // kein neues Datenpaket -> weitermachen
+                                // kein Paket -> weitermachen
                             } else {
                                 console.error("pollLoop error:", err);
-                                // Verbindung evtl. beenden
                                 this.pollRunning = false;
                                 break;
                             }
@@ -334,27 +366,22 @@
                     }
                 },
 
-                /**
-                 * Aktualisiert unsere "Allzeit"-Listen (allTimeBestLaps / allTimeBestSectors),
-                 * wenn wir neue Top-5 Zeiten haben, die besser sind als die bisher gespeicherten.
-                 */
                 updateAllTimeBest(currentTopLaps, currentTopSectors) {
-                    // currentTopLaps -> Array der 5 besten Runden in dieser Session
-                    // wir schmeißen sie in eine große Liste -> sortieren -> kürzen
                     const combinedLaps = [...this.allTimeBestLaps, ...currentTopLaps];
                     combinedLaps.sort((a, b) => a - b);
-                    // Wir behalten nur z.B. die 20 besten aller Zeiten, oder wie du willst
                     this.allTimeBestLaps = combinedLaps.slice(0, 20);
 
-                    // Gleiches für Sektoren
-                    const combinedSectors = [...this.allTimeBestSectors, ...currentTopSectors];
+                    const combinedSectors = [
+                        ...this.allTimeBestSectors,
+                        ...currentTopSectors,
+                    ];
                     combinedSectors.sort((a, b) => a - b);
                     this.allTimeBestSectors = combinedSectors.slice(0, 20);
 
-                    // Speichern
                     this.saveAllTimeBestTimes();
                 },
 
+                // Button-Funktionen
                 async startRace() {
                     if (!this.cu) {
                         alert("Keine CU verbunden!");
@@ -364,9 +391,10 @@
                     log("Rennen gestartet (Start-Button)");
                 },
                 stopRace() {
-                    // Keine echte Implementierung in der CU, ggf. Pace Car/ESC drücken
-                    alert("Rennen gestoppt (Demo)!");
+                    // CU hat keinen direkten "Stop" – man könnte z.B. Start-Button nochmal drücken, 
+                    // oder ESC-Button etc.
                     this.pollRunning = false;
+                    alert("Rennen gestoppt (Demo)");
                 },
                 async resetTrack() {
                     if (!this.rms) return;
@@ -374,23 +402,59 @@
                     log("CU Reset und Positionsturm zurückgesetzt");
                 },
                 resetSession() {
-                    // Session-Rücksetzung => wir machen einfach resetAll() + leeren der Session-Daten
                     if (!this.rms) return;
                     this.rms.resetAll();
                     alert("Session zurückgesetzt!");
                 },
-            },
+                async pressPaceCar() {
+                    if (!this.cu) return;
+                    await this.cu.press(ControlUnit.PACE_CAR_ESC_BUTTON_ID);
+                    log("Pace Car/ESC gedrückt");
+                },
+                async pressCode() {
+                    if (!this.cu) return;
+                    await this.cu.press(ControlUnit.CODE_BUTTON_ID);
+                    log("Code gedrückt");
+                },
 
+                // Speed / Brake / Fuel Einstellen
+                async updateSpeed(car) {
+                    if (!this.cu) return;
+                    let val = parseInt(this.carSpeed[car], 10) || 0;
+                    if (val < 0) val = 0;
+                    if (val > 15) val = 15;
+                    this.carSpeed[car] = val;
+                    await this.cu.setspeed(car - 1, val);
+                    log("Set Speed auf Car#" + car + " = " + val);
+                },
+                async updateBrake(car) {
+                    if (!this.cu) return;
+                    let val = parseInt(this.carBrake[car], 10) || 0;
+                    if (val < 0) val = 0;
+                    if (val > 15) val = 15;
+                    this.carBrake[car] = val;
+                    await this.cu.setbrake(car - 1, val);
+                    log("Set Brake auf Car#" + car + " = " + val);
+                },
+                async updateFuel(car) {
+                    if (!this.cu) return;
+                    let val = parseInt(this.carFuel[car], 10) || 0;
+                    if (val < 0) val = 0;
+                    if (val > 15) val = 15;
+                    this.carFuel[car] = val;
+                    await this.cu.setfuel(car - 1, val);
+                    log("Set Fuel auf Car#" + car + " = " + val);
+                },
+            },
             mounted() {
-                // Blink-Animation Demo
                 setInterval(() => {
                     this.blinkActive = true;
                     setTimeout(() => {
                         this.blinkActive = false;
-                    }, 1500);
+                    }, 1000);
                 }, 5000);
 
-                // Lade gespeicherte Daten
+                // Laden von LocalStorage
                 this.loadDriverNames();
                 this.loadAllTimeBestTimes();
             },
@@ -416,8 +480,8 @@
             /* Carrera-Rot */
         }
 
-        .v-card-text,
-        .v-card-subtitle {
+        .v-card-subtitle,
+        .v-card-text {
             color: #b0b0b0;
         }
 
@@ -448,6 +512,10 @@
             background-color: #3498db;
         }
 
+        .v-btn.secondary {
+            background-color: #6c757d;
+        }
+
         .v-container {
             margin-top: 20px;
         }
@@ -467,7 +535,7 @@
         }
 
         .blink-bg {
-            animation: blink-bg 0.5s ease-in-out infinite;
+            animation: blink-bg 0.75s ease-in-out infinite;
         }
     </style>
 </body>
