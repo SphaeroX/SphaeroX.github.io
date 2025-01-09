@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Carrera Bahn Dashboard</title>
+    <!-- Material Design Icons + Vuetify CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/@mdi/font/css/materialdesignicons.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/vuetify@3.7.6/dist/vuetify.min.css" rel="stylesheet">
+
+    <!-- WICHTIG: Wir binden unsere carerra4.js als ES-Modul ein -->
+    <script type="module" src="./carerra.js"></script>
+
+    <!-- Vue + Vuetify JS -->
+    <script src="https://cdn.jsdelivr.net/npm/vue@3.3.10/dist/vue.global.prod.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vuetify@3.7.6/dist/vuetify.min.js"></script>
+</head>
+
+<body>
+    <div id="app">
+        <v-app class="app">
+            <v-container>
+
+                <!-- Event-Anzeige (nur Demo, blinkt alle 5s) -->
+                <v-row>
+                    <v-col>
+                        <v-card>
+                            <v-card-text class="text-h6 text-center" :class="{ 'blink-bg': blinkActive }">
+                                {{ aktuellesEvent }}
+                            </v-card-text>
+                        </v-card>
+                    </v-col>
+                </v-row>
+
+                <!-- Top 5 Rundenzeiten & Sektorzeiten (Aus dem RaceManager) -->
+                <v-row>
+                    <v-col cols="12" md="6">
+                        <v-card>
+                            <v-card-title>Top 5 Rundenzeiten (Allzeit)</v-card-title>
+                            <v-list>
+                                <v-list-item v-for="(item, index) in allTimeBestLaps.slice(0, 5)" :key="index">
+                                    <v-list-item-content>
+                                        <v-list-item-title>
+                                            {{ index + 1 }}. {{ formatMs(item) }}
+                                        </v-list-item-title>
+                                    </v-list-item-content>
+                                </v-list-item>
+                            </v-list>
+                        </v-card>
+                    </v-col>
+
+                    <v-col cols="12" md="6">
+                        <v-card>
+                            <v-card-title>Top 5 Sektorzeiten (Allzeit)</v-card-title>
+                            <v-list>
+                                <v-list-item v-for="(item, index) in allTimeBestSectors.slice(0, 5)" :key="index">
+                                    <v-list-item-content>
+                                        <v-list-item-title>
+                                            {{ index + 1 }}. {{ formatMs(item) }}
+                                        </v-list-item-title>
+                                    </v-list-item-content>
+                                </v-list-item>
+                            </v-list>
+                        </v-card>
+                    </v-col>
+                </v-row>
+
+                <!-- Fahrerübersicht (Aktuelle Session) -->
+                <v-row>
+                    <v-col cols="12" md="12">
+                        <v-card>
+                            <v-card-title>Aktuelle Session: Fahrer & Zeiten</v-card-title>
+                            <v-data-table :headers="fahrerdatenHeaders" :items="aktuelleFahrerdaten" disable-pagination
+                                hide-default-footer>
+                                <template #item.fahrer="{ item }">
+                                    <!-- Fahrername aus "fahrerNameMap" -->
+                                    <span :style="{ fontWeight: 'bold', color: fahrerFarbe(item.num) }">
+                                        {{ fahrerNameMap[item.num] || ('Fahrer ' + item.num) }}
+                                    </span>
+                                </template>
+                                <template #item.bestlap="{ item }">
+                                    {{ formatMs(item.bestlap) }}
+                                </template>
+                                <template #item.laptime="{ item }">
+                                    {{ formatMs(item.laptime) }}
+                                </template>
+                            </v-data-table>
+                        </v-card>
+                    </v-col>
+                </v-row>
+
+                <!-- Control Panel -->
+                <v-row>
+                    <v-col cols="12" class="text-center">
+                        <v-card>
+                            <v-card-title>Steuerung</v-card-title>
+                            <v-card-text class="pt-4">
+                                <v-btn class="my-1" color="primary" @click="startRace">Rennstart</v-btn>
+                                <v-btn class="my-1" color="error" @click="stopRace">Stop</v-btn>
+                                <v-btn class="my-1" color="success" @click="resetTrack">Strecke zurücksetzen (CU
+                                    Reset)</v-btn>
+                                <v-btn class="my-1" color="warning" @click="resetSession">Session zurücksetzen</v-btn>
+                                <v-btn class="my-1" color="info" @click="connect">Verbinden (BLE)</v-btn>
+                            </v-card-text>
+                        </v-card>
+                    </v-col>
+                </v-row>
+
+                <!-- Fahrer Zuordnung manuell (Pro Car-ID) -->
+                <v-row>
+                    <v-col cols="12">
+                        <v-card>
+                            <v-card-title>Fahrer Registrierung / Zuordnung</v-card-title>
+                            <v-card-text>
+                                <v-row>
+                                    <v-col v-for="carId in 8" :key="carId" cols="12" md="4" lg="3">
+                                        <v-text-field :label="'Car ' + carId + ' - Fahrername'"
+                                            v-model="fahrerNameMap[carId]" @input="saveDriverNames"></v-text-field>
+                                    </v-col>
+                                </v-row>
+                            </v-card-text>
+                        </v-card>
+                    </v-col>
+                </v-row>
+
+            </v-container>
+        </v-app>
+    </div>
+
+    <script type="module">
+        import {
+            log,
+            openConnection,
+            ControlUnit,
+            RaceManager,
+            msToString,
+            TimeoutError
+        } from "./carerra4.js";
+
+        const { createApp } = Vue;
+        const { createVuetify } = Vuetify;
+        const vuetify = createVuetify();
+
+        createApp({
+            data() {
+                return {
+                    blinkActive: false,
+                    aktuellesEvent: "Aktuelles Event",
+
+                    // Mapping Car-ID -> Name
+                    fahrerNameMap: {
+                        1: "",
+                        2: "",
+                        3: "",
+                        4: "",
+                        5: "",
+                        6: "",
+                        7: "",
+                        8: "",
+                    },
+
+                    fahrerfarben: [
+                        "#f72047",
+                        "#ffd200",
+                        "#1feaea",
+                        "#a020f0",
+                        "#ff6347",
+                        "#4682b4",
+                        "#32cd32",
+                        "#ff69b4",
+                    ],
+
+                    // DataTable-Header
+                    fahrerdatenHeaders: [
+                        { text: "Car #", value: "num" },
+                        { text: "Fahrer", value: "fahrer" },
+                        { text: "Laps", value: "laps" },
+                        { text: "Letzte Runde", value: "laptime" },
+                        { text: "Beste Runde", value: "bestlap" },
+                        { text: "Pits", value: "pits" },
+                        { text: "Fuel", value: "fuel" },
+                    ],
+
+                    // BLE / CU / RMS
+                    connection: null,
+                    cu: null,
+                    rms: null,
+
+                    // Allzeit-Bestzeiten (werden in localStorage gespeichert)
+                    allTimeBestLaps: [],
+                    allTimeBestSectors: [],
+
+                    pollRunning: false,
+                };
+            },
+
+            computed: {
+                // Liste der Fahrer (aktuelle Session) vom RaceManager
+                aktuelleFahrerdaten() {
+                    if (!this.rms) return [];
+                    // Sortierte Liste
+                    return this.rms.getSortedDrivers();
+                },
+            },
+
+            methods: {
+                fahrerFarbe(carNum) {
+                    // Einfache Zuordnung über Index-Offset
+                    const idx = (carNum - 1) % this.fahrerfarben.length;
+                    return this.fahrerfarben[idx];
+                },
+
+                formatMs(ms) {
+                    return msToString(ms);
+                },
+
+                /**
+                 * Lädt (falls vorhanden) Fahrer-Namen aus localStorage
+                 */
+                loadDriverNames() {
+                    const data = localStorage.getItem("fahrerNameMap");
+                    if (data) {
+                        try {
+                            const parsed = JSON.parse(data);
+                            // Nur Keys 1-8 übernehmen
+                            for (let i = 1; i <= 8; i++) {
+                                if (typeof parsed[i] === "string") {
+                                    this.fahrerNameMap[i] = parsed[i];
+                                }
+                            }
+                        } catch (e) {
+                            console.warn("Fehler beim Laden der Fahrernamen:", e);
+                        }
+                    }
+                },
+
+                /**
+                 * Speichert die Fahrer-Namen in localStorage
+                 */
+                saveDriverNames() {
+                    localStorage.setItem("fahrerNameMap", JSON.stringify(this.fahrerNameMap));
+                },
+
+                /**
+                 * Lädt Allzeit-Bestzeiten aus localStorage
+                 */
+                loadAllTimeBestTimes() {
+                    const laps = localStorage.getItem("allTimeBestLaps");
+                    const sectors = localStorage.getItem("allTimeBestSectors");
+                    if (laps) {
+                        try {
+                            this.allTimeBestLaps = JSON.parse(laps);
+                        } catch (e) {
+                            console.warn("Fehler beim Laden der allTimeBestLaps:", e);
+                        }
+                    }
+                    if (sectors) {
+                        try {
+                            this.allTimeBestSectors = JSON.parse(sectors);
+                        } catch (e) {
+                            console.warn("Fehler beim Laden der allTimeBestSectors:", e);
+                        }
+                    }
+                },
+
+                /**
+                 * Schreibt Allzeit-Bestzeiten in localStorage
+                 */
+                saveAllTimeBestTimes() {
+                    localStorage.setItem("allTimeBestLaps", JSON.stringify(this.allTimeBestLaps));
+                    localStorage.setItem("allTimeBestSectors", JSON.stringify(this.allTimeBestSectors));
+                },
+
+                /**
+                 * Baut eine Verbindung via BLE auf
+                 */
+                async connect() {
+                    if (this.connection) {
+                        alert("Bereits verbunden oder noch am Verbinden...");
+                        return;
+                    }
+                    try {
+                        this.connection = await openConnection();
+                        this.cu = new ControlUnit(this.connection);
+                        const version = await this.cu.version();
+                        log("CU Version: " + version);
+
+                        // RaceManager anlegen
+                        this.rms = new RaceManager(this.cu);
+                        await this.rms.resetAll();
+
+                        // Poll starten
+                        this.startPollLoop();
+                        alert("Verbindung erfolgreich aufgebaut!");
+                    } catch (err) {
+                        console.error("Fehler beim Verbinden:", err);
+                        alert("Fehler beim Verbinden: " + err);
+                    }
+                },
+
+                async startPollLoop() {
+                    if (this.pollRunning) return;
+                    this.pollRunning = true;
+
+                    while (this.pollRunning && this.cu) {
+                        try {
+                            const data = await this.cu.poll();
+                            if (data) {
+                                if (data.type === "status") {
+                                    this.rms.handleStatus(data);
+                                } else if (data.type === "timer") {
+                                    await this.rms.handleTimer(data);
+                                }
+                            }
+                            // Aktuelle Top5-Laps/Sektors in RMS
+                            const topLaps = this.rms.getTop5Laps();
+                            const topSectors = this.rms.getTop5Sectors();
+
+                            // Allzeit-Bestzeiten ggf. aktualisieren
+                            this.updateAllTimeBest(topLaps, topSectors);
+
+                        } catch (err) {
+                            if (err instanceof TimeoutError) {
+                                // kein neues Datenpaket -> weitermachen
+                            } else {
+                                console.error("pollLoop error:", err);
+                                // Verbindung evtl. beenden
+                                this.pollRunning = false;
+                                break;
+                            }
+                        }
+                        await new Promise((resolve) => setTimeout(resolve, 500));
+                    }
+                },
+
+                /**
+                 * Aktualisiert unsere "Allzeit"-Listen (allTimeBestLaps / allTimeBestSectors),
+                 * wenn wir neue Top-5 Zeiten haben, die besser sind als die bisher gespeicherten.
+                 */
+                updateAllTimeBest(currentTopLaps, currentTopSectors) {
+                    // currentTopLaps -> Array der 5 besten Runden in dieser Session
+                    // wir schmeißen sie in eine große Liste -> sortieren -> kürzen
+                    const combinedLaps = [...this.allTimeBestLaps, ...currentTopLaps];
+                    combinedLaps.sort((a, b) => a - b);
+                    // Wir behalten nur z.B. die 20 besten aller Zeiten, oder wie du willst
+                    this.allTimeBestLaps = combinedLaps.slice(0, 20);
+
+                    // Gleiches für Sektoren
+                    const combinedSectors = [...this.allTimeBestSectors, ...currentTopSectors];
+                    combinedSectors.sort((a, b) => a - b);
+                    this.allTimeBestSectors = combinedSectors.slice(0, 20);
+
+                    // Speichern
+                    this.saveAllTimeBestTimes();
+                },
+
+                async startRace() {
+                    if (!this.cu) {
+                        alert("Keine CU verbunden!");
+                        return;
+                    }
+                    await this.cu.start();
+                    log("Rennen gestartet (Start-Button)");
+                },
+                stopRace() {
+                    // Keine echte Implementierung in der CU, ggf. Pace Car/ESC drücken
+                    alert("Rennen gestoppt (Demo)!");
+                    this.pollRunning = false;
+                },
+                async resetTrack() {
+                    if (!this.rms) return;
+                    await this.rms.resetAll();
+                    log("CU Reset und Positionsturm zurückgesetzt");
+                },
+                resetSession() {
+                    // Session-Rücksetzung => wir machen einfach resetAll() + leeren der Session-Daten
+                    if (!this.rms) return;
+                    this.rms.resetAll();
+                    alert("Session zurückgesetzt!");
+                },
+            },
+
+            mounted() {
+                // Blink-Animation Demo
+                setInterval(() => {
+                    this.blinkActive = true;
+                    setTimeout(() => {
+                        this.blinkActive = false;
+                    }, 1500);
+                }, 5000);
+
+                // Lade gespeicherte Daten
+                this.loadDriverNames();
+                this.loadAllTimeBestTimes();
+            },
+        }).use(vuetify).mount("#app");
+    </script>
+
+    <style>
+        .app {
+            background-color: #1a1a1a;
+            color: white;
+            font-family: 'Arial', sans-serif;
+        }
+
+        .v-card {
+            background-color: #2c2c2c;
+            border-radius: 12px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.7);
+        }
+
+        .v-card-title {
+            color: white;
+            background-color: #d52b1e;
+            /* Carrera-Rot */
+        }
+
+        .v-card-text,
+        .v-card-subtitle {
+            color: #b0b0b0;
+        }
+
+        .v-btn {
+            text-transform: uppercase;
+            font-weight: bold;
+            letter-spacing: 1px;
+            width: 100%;
+        }
+
+        .v-btn.primary {
+            background-color: #d52b1e;
+        }
+
+        .v-btn.error {
+            background-color: #ff3333;
+        }
+
+        .v-btn.success {
+            background-color: #2ecc71;
+        }
+
+        .v-btn.warning {
+            background-color: #f39c12;
+        }
+
+        .v-btn.info {
+            background-color: #3498db;
+        }
+
+        .v-container {
+            margin-top: 20px;
+        }
+
+        @keyframes blink-bg {
+
+            0%,
+            50% {
+                background-color: #f3e412;
+                color: black;
+            }
+
+            100% {
+                background-color: transparent;
+                color: white;
+            }
+        }
+
+        .blink-bg {
+            animation: blink-bg 0.5s ease-in-out infinite;
+        }
+    </style>
+</body>
+
+</html>
